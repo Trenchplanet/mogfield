@@ -1,0 +1,14 @@
+{
+  "name": "mogfield",
+  "description": "MOGFIELD: an open-source AI film studio that runs video generation as ComfyUI workflows on Comfy Cloud or your own ComfyUI.",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "setup": "npm --prefix app install",
+    "dev": "npm --prefix app run dev",
+    "build": "npm --prefix app run build",
+    "start": "npm --prefix app start",
+    "typecheck": "npm --prefix app run typecheck",
+    "test:nodes": "cd nodes/comfyui-backlot && python -m pytest -q"
+  }
+}

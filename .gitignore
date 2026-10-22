@@ -1,0 +1,32 @@
+# dependencies and build output
+node_modules/
+app/dist/
+dist/
+
+# secrets: keep your Comfy API key in app/.env only
+.env
+.env.*
+!.env.example
+
+# user media and runtime state
+app/data/
+app/.private-data/
+data/
+*.log
+logs/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# editors and OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# local tooling and tunnels
+.cloudflared/
+*.tunnel

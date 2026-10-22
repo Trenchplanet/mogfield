@@ -1,0 +1,20 @@
+[project]
+name = "comfyui-backlot"
+description = "Real camera paths and real optics for ComfyUI video: CameraRig (depth-reprojected camera moves as a control signal), LensKit (thin-lens DOF, anamorphic bokeh, halation, grain), GradeLUT (.cube), Letterbox and ShotCard."
+version = "0.1.0"
+license = { file = "LICENSE" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/OWNER/backlot"
+
+[tool.comfy]
+PublisherId = "backlot"
+DisplayName = "Backlot"
+Icon = ""
+includes = ["luts"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+pythonpath = ["."]
