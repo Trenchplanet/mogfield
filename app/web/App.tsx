@@ -875,6 +875,7 @@ export function App() {
             generationError={generationError ?? (render?.status === "failed" ? render.error ?? render.message : null)}
             onGenerate={onGenerate}
             onPro={() => setLevel("pro")}
+            onTool={(id) => setTab(id)}
             onOpenLibrary={setLibraryFor}
             onDropItem={onDropItem}
             trim={trim}

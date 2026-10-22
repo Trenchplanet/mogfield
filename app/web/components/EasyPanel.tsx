@@ -11,6 +11,7 @@ import { MentionTextarea, type MentionRef } from "./MentionTextarea";
 import { ModelPicker } from "./ModelPicker";
 import { GenerationStatus } from "./GenerationStatus";
 import { saveToPhotos } from "../save";
+import { ToolCards, type ToolId } from "./ToolCards";
 
 function Icon({ d, size = 18 }: { d: string; size?: number }) {
   return (
@@ -54,6 +55,7 @@ export function EasyPanel(p: {
   steps?: import("../../server/shared").JobStep[];
   onGenerate: () => void;
   onPro: () => void;
+  onTool: (id: ToolId) => void;
   onOpenLibrary: (target: "video" | "image") => void;
   onDropItem: (item: DragItem) => void;
   trim: Trim;
@@ -146,12 +148,7 @@ export function EasyPanel(p: {
             <video src={p.renderPreview.url} controls playsInline preload="auto" />
           </section>
         )}
-        <div className="mode-hero" style={p.clip ? { backgroundImage: `url(${p.clip.poster})` } : undefined}>
-          <div className="mode-hero-text">
-            <h2 className="wordmark">MOGFIELD</h2>
-            <p>Motion Transfer · Character Swap</p>
-          </div>
-        </div>
+        <ToolCards active="studio" onPick={p.onTool} />
 
         {p.clip ? (
           <div className={`drop-card big has ${over === "video" ? "over" : ""}`} {...dropProps("video")}>

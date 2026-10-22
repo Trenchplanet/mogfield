@@ -114,11 +114,6 @@ textarea:focus, input:focus { box-shadow: 0 0 0 2px var(--blue); }
 .generation-status.failed { gap: 3px; padding: 8px 10px; margin-bottom: 8px; border: 1px solid rgba(255,85,75,.25); border-radius: 10px; background: rgba(255,85,75,.07); color: #ff9a91; overflow-wrap: anywhere; }
 .generation-status.failed b { color: #ff9a91; font-weight: 650; }
 
-.mode-hero { position: relative; height: 150px; flex: 0 0 150px; border-radius: 18px; overflow: hidden; background: var(--card) center / cover; }
-.mode-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,0.75)); }
-.mode-hero-text { position: absolute; left: 16px; bottom: 14px; z-index: 1; }
-.mode-hero h2 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.025em; }
-.mode-hero p { margin: 2px 0 0; color: rgba(255,255,255,0.75); font-size: 14px; }
 .hero-change { position: absolute; top: 10px; right: 10px; z-index: 2; background: rgba(0,0,0,0.45); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); font-size: 13px; padding: 6px 12px; }
 .hero-change:hover:not(:disabled) { background: rgba(0,0,0,0.6); }
 
@@ -1070,3 +1065,22 @@ button.lp-tile:hover:not(:disabled) { background: var(--card); }
   .brand-name { display: none; }
   .mode-switch button { padding: 4px 8px; }
 }
+
+/* ------------------------------------------------------------ tool cards (top of Create) */
+
+.mode-hero { position: relative; height: 150px; flex: 0 0 150px; border-radius: 18px; overflow: hidden; background: var(--card) center / cover; }
+.mode-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,0.75)); }
+.mode-hero-text { position: absolute; left: 16px; bottom: 14px; z-index: 1; }
+.mode-hero h2 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.025em; }
+.mode-hero p { margin: 2px 0 0; color: rgba(255,255,255,0.75); font-size: 14px; }
+
+.tool-cards { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -2px; padding: 2px; flex: 0 0 auto; }
+.tool-cards::-webkit-scrollbar { display: none; }
+.tool-card { position: relative; flex: 0 0 148px; scroll-snap-align: start; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 4px; min-height: 128px; padding: 14px; border-radius: 18px; text-align: left; white-space: normal; background: linear-gradient(160deg, rgba(var(--tint), 0.22), rgba(var(--tint), 0.05) 70%), var(--card); box-shadow: inset 0 0 0 1px rgba(var(--tint), 0.18); color: var(--text); }
+.tool-card:hover:not(:disabled) { background: linear-gradient(160deg, rgba(var(--tint), 0.3), rgba(var(--tint), 0.08) 70%), var(--card); }
+.tool-card.on { box-shadow: inset 0 0 0 2px rgb(var(--tint)); }
+.tool-card i { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 6px; border-radius: 10px; background: rgba(var(--tint), 0.25); color: rgb(var(--tint)); }
+.tool-card svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tool-card b { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.tool-card small { color: var(--text-2); font-size: 12.5px; line-height: 1.35; }
+.tool-card em { position: absolute; top: 12px; right: 12px; font-style: normal; font-size: 10.5px; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; color: rgb(var(--tint)); }
