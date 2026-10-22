@@ -31,16 +31,17 @@ export function ModelPicker(p: { models: ModelOption[]; model: string; setModel:
   // close menus on outside click / Escape
   useEffect(() => {
     if (!menu) return;
-    const onDown = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest(".easy-menu, .row-select")) setMenu(null);
+    // pointerdown: iOS sends no mousedown for taps on plain areas
+    const onDown = (e: PointerEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest(".easy-menu, .row-select")) setMenu(null);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenu(null);
     const onScroll = () => setMenu(null);
     window.addEventListener("resize", onScroll);
-    window.addEventListener("mousedown", onDown);
+    window.addEventListener("pointerdown", onDown);
     window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", onScroll);
     };

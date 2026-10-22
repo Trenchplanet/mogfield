@@ -124,7 +124,7 @@ export function PreparationSheet(p: {
 
   const mayClose = !busy;
   return (
-    <div className="sheet-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && mayClose) p.onClose(); }}>
+    <div className="sheet-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget && mayClose) p.onClose(); }}>
       <section className="prep-sheet" role="dialog" aria-modal="true" aria-labelledby="prep-title">
         <header className="prep-head">
           <div><span className="prep-eyebrow">GENJUSTSU · COMFY EDITION</span><h2 id="prep-title">Prepare and review the take</h2></div>

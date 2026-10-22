@@ -1,11 +1,20 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Clip, Render } from "../../server/shared";
 import { PRESET_LABEL } from "../camera";
 import { lutLabel } from "../lut";
 import { saveToPhotos } from "../save";
 
+/** Plays only while on screen: a phone on a tunnel can't stream every tile at once. */
 function LoopingVideo({ src, poster }: { src: string; poster?: string }) {
-  return <video src={src} poster={poster} muted loop autoPlay playsInline preload="metadata" />;
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    const io = new IntersectionObserver(([e]) => (e.isIntersecting ? void v.play().catch(() => {}) : v.pause()), { threshold: 0.5 });
+    io.observe(v);
+    return () => io.disconnect();
+  }, []);
+  return <video ref={ref} src={src} poster={poster} muted loop playsInline preload={poster ? "none" : "metadata"} />;
 }
 
 export function Gallery(p: {

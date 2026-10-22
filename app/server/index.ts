@@ -1106,6 +1106,9 @@ app.use("/luts/*", serveStatic({ root: LUT_DIR, rewriteRequestPath: (p) => p.rep
 app.use("/media/*", serveStatic({ root: DATA_DIR, rewriteRequestPath: (p) => p.replace(/^\/media/, "") }));
 app.use("/examples/*", serveStatic({ root: join(EXAMPLES_DIR, "..", ".."), }));
 
+// unknown API paths answer JSON, not the app page
+app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
+
 if (process.env.NODE_ENV === "production") {
   const dist = join(APP_DIR, "dist");
   app.use("/*", serveStatic({ root: dist }));

@@ -1042,3 +1042,31 @@ button.lp-tile:hover:not(:disabled) { background: var(--card); }
 .st-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .st-chips button { padding: 6px 10px; border-radius: 999px; background: var(--card); color: var(--text-2); font-size: 12px; }
 .st-chips button.on { background: var(--blue); color: #fff; }
+
+/* ------------------------------------------------------------ small screens: fixes */
+
+/* tablet landscape / small laptop: the nav links are hidden from 1180 px, the menu takes over */
+@media (max-width: 1180px) {
+  .burger { display: inline-flex; background: none; }
+  .burger:hover:not(:disabled) { background: var(--card); }
+}
+.burger { flex: 0 0 40px; }
+.burger-menu { max-height: calc(100dvh - 70px); overflow-y: auto; }
+.generate:disabled { opacity: 1; background: var(--card-2); color: var(--text-3); }
+.rs-take-meta { flex-wrap: wrap; }
+.tv-take-actions { flex-wrap: wrap; justify-content: flex-end; }
+.app { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+
+@media (max-width: 820px) {
+  /* iOS zooms into fields under 16 px */
+  input, textarea, select { font-size: 16px !important; }
+  .prep-actions { flex-wrap: wrap; }
+  .prep-actions button { flex: 1 1 auto; }
+  .prep-actions .primary { flex-basis: 100%; order: -1; }
+  .lib-act { width: 36px; height: 36px; }
+  .be-sheet, .prep-content, .queue-panel, .lib-body, .tv-refs { overscroll-behavior: contain; }
+}
+@media (max-width: 400px) {
+  .brand-name { display: none; }
+  .mode-switch button { padding: 4px 8px; }
+}

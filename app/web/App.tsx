@@ -103,6 +103,8 @@ export function App() {
   };
   const [prompt, setPrompt] = useState("");
   const [tab, setTab] = useState<Tab>("studio");
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
   const [developing, setDeveloping] = useState<{ id: string; progress: number; frame: string | null; message: string } | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [sharing, setSharing] = useState<Render | null>(null);
@@ -535,8 +537,11 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      // studio shortcuts only on the studio, never under an open sheet (G starts a paid render)
+      const sheetOpen = !!document.querySelector('[role=dialog], .sheet-backdrop, .library');
+      if ((e.code === "Space" || e.key === "g" || e.key === "G") && (tabRef.current !== "studio" || sheetOpen || t.tagName === "BUTTON")) return;
       if (e.code === "Space") {
         e.preventDefault();
         monitor.current?.togglePlay();
@@ -1105,6 +1110,7 @@ export function App() {
             }).catch((e) => say((e as Error).message))
           }
           onDelete={(id) =>
+            confirm("Delete this image? This can't be undone.") &&
             void api.deleteImage(id).then(() => {
               setImages((xs) => xs.filter((x) => x.id !== id));
               setCasts((xs) => xs.filter((x) => x.id !== id));
