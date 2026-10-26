@@ -18,6 +18,7 @@ const CURATED: Omit<ModelOption, "available" | "needs" | "provider">[] = [
   { id: "comfy:byteplus/dreamina-seedance-2-5-260628", label: "Seedance 2.5", badges: ["Top"], qualities: ["480p", "720p", "1080p"], maxSeconds: 30, pricing: { kind: "seedance-tokens", per1k: { "480p": 1.931, "720p": 1.931, "1080p": 2.112 } } },
   { id: "comfy:byteplus/dreamina-seedance-2-0-260128", label: "Seedance 2.0", badges: [], qualities: ["480p", "720p"], maxSeconds: 15, pricing: { kind: "seedance-tokens", per1k: { "480p": 1.297, "720p": 1.297 } } },
   { id: "comfy:byteplus/dreamina-seedance-2-0-fast-260128", label: "Seedance 2.0 Fast", badges: ["Cheapest"], qualities: ["480p", "720p"], maxSeconds: 15, pricing: { kind: "seedance-tokens", per1k: { "480p": 0.996, "720p": 0.996 } } },
+  { id: "comfy:byteplus/dreamina-seedance-2-0-mini", label: "Seedance 2.0 Mini", badges: [], qualities: ["480p", "720p"], maxSeconds: 15, pricing: { kind: "seedance-tokens", per1k: { "480p": 0.649, "720p": 0.649 } } },
   { id: "comfy:ltx/ltx-2-5-fast", label: "LTX 2.5 Fast", badges: ["Text-to-video"], qualities: ["720p", "1080p"], maxSeconds: 20, inputMode: "text-only" },
   { id: "comfy:ltx/ltx-2-5-pro", label: "LTX 2.5 Pro", badges: ["Text-to-video"], qualities: ["720p", "1080p"], maxSeconds: 20, inputMode: "text-only" },
   { id: "comfy:minimax/minimax-h3", label: "MiniMax H3", badges: ["Video + audio"], qualities: ["768p", "2K"], maxSeconds: 15, inputMode: "text-image" },

@@ -8,44 +8,91 @@ on **your own ComfyUI** ("LOCAL" mode), through [`@comfyorg/sdk`](https://www.np
 The workflows are plain JSON files in [`workflows/`](workflows/), so you can open,
 inspect and change exactly what runs.
 
+The aim: anyone can paste a Comfy API key and start generating in a minute,
+while people with their own GPU keep full control, mixing and matching their
+own models in the workflows.
+
 It is a Vite + React web app with a small Hono server. The browser never talks
 to ComfyUI and never sees your key: the server binds your take and settings to
 the workflow, submits it, and streams progress back.
 
-## Screenshots
+## Quick start
 
-<!-- Add screenshots or a GIF of the app here, e.g. docs/screenshot-create.png -->
+```bash
+git clone https://github.com/<you>/mogfield.git
+cd mogfield/app
+npm install
+cp .env.example .env     # paste your Comfy API key after COMFY_API_KEY=
+npm run build && npm start
+```
 
-_Coming soon._
+Open http://localhost:8787. With a key the header shows **API** and your
+remaining Comfy credits; without one the app runs its ffmpeg preview engine so
+you can try the whole interface for free.
 
-## Features
+## What you can do
 
-- **Create**: add a video and your characters, press Generate. MOGFIELD builds a
-  depth map, measures camera and subject motion per second, lays out a character
-  reference sheet, writes the prompt (with a second-by-second motion lock) and
-  sends it to the model you pick. No prompt writing needed. **Pro** mode exposes
-  every control.
-- **Character Studio**: make reusable characters from a photo and a few
-  elements, with reference sheets and character cards.
-- **Restyle**: keep the take's motion (via its depth map) with new characters,
-  world and style.
-- **Re-shoot**: the same take filmed again from another angle (profile, drone, ...).
-- **Text to video**: a reference image and a prompt, in any common aspect ratio.
-- **Preparation and review** (adapted from Genjustsu): before spending video
-  credits, the take is normalized, gets coloured depth and SAM 3 person masks,
-  and its vocals are separated and pitch-shifted. You review the mask overlay and
-  approve it, then render a cheap draft before the full-resolution final.
-- **MiniMax H3 character swap** on your own ComfyUI or Comfy Cloud.
-- **Depth maps** on the GPU (Depth Anything V2 Large) or on the CPU with no setup
-  (Depth Anything V2 Small via onnxruntime).
-- **Direct**: real camera paths reprojected through the take's depth map, real
-  lens optics (focal crop, thin-lens bokeh, anamorphic), LUT grading and
-  letterboxing, from the bundled `comfyui-backlot` node pack.
-- **Library, queue and gallery**: every take keeps the exact workflow it ran
-  (`Workflow` button), a 16:9 A/B export, and a vertical before/after for sharing.
-- **Paste a link**: TikTok, Instagram and X video links become input takes (via `yt-dlp`).
+The top bar has five places. Each has its own options in the bar below it.
+
+### Video
+
+- **Create**: a prompt, optional start and end frames, up to four reference
+  pictures. Pick a model tuned for MOGFIELD (Seedance 2.5 / 2.0 / Fast / Mini,
+  Wan 3.0, MiniMax H3, LTX 2.5) or, with **API** on, **any video model in the
+  Comfy API catalog**: Kling, Veo 3.1, Wan 2.x, Luma Ray, Grok Imagine, Pika,
+  Moonvalley and more. The catalog is read from Comfy at startup and each
+  model's request is filled from its published schema, so new models show up
+  without code changes. Models that need inputs the form cannot give (a source
+  video, a mask) are listed greyed out with the reason.
+- **Extend**: the last frame of any clip becomes the first frame of the next,
+  then both are joined into one video.
+- **Re-shoot**: the same moment filmed again from another angle (orbit, low
+  angle, overhead, drone, close-up…).
+- **Restyle**: keep the take's motion, change the characters, the world and
+  the look. Pick a style, type your own, or add a style picture: its look is
+  described into the Style box so it works with every model.
+- **History**: every take at its real shape, with Save, Extend and the exact
+  ComfyUI workflow it ran.
+
+### Image
+
+- **Create Image**: a picture from a prompt and up to four references, with
+  Nano Banana 2.1 by default or any image model in the Comfy API catalog
+  (FLUX, Seedream, GPT Image, Recraft, Ideogram, Gemini image models and more).
+- **Create Character**: start from a photo, add elements (hair, outfit,
+  props, transformations), check the picture, then turn it into a character
+  reference sheet for your videos.
+
+### Character Swap
+
+Put your characters into a real phone take. MOGFIELD builds a depth map,
+measures camera and subject motion per second, lays out a character reference
+sheet and writes the prompt with a second-by-second motion lock, so no prompt
+writing is needed. **Easy** is one screen; **Pro** exposes every control, the
+Genjustsu preparation (SAM 3 person masks, separated and pitch-shifted vocals,
+review before you spend credits) and draft-then-final rendering.
+
+### Library
+
+Uploads, preparations and finished takes in one place, with the queue, a 16:9
+A/B export and a vertical before/after for sharing. Pasted TikTok, Instagram
+and X links become input takes (via `yt-dlp`).
+
+### Agent (beta)
+
+Describe a film in plain words. A director model writes a storyboard, draws
+key frames with your cast, and renders the shots after you approve each stage.
+
+### Everywhere
+
+- **API / LOCAL switch** in the header: run on Comfy Cloud with a key, or on
+  your own ComfyUI. The choice applies live.
+- **Credits** in the header while on API: what is left on your Comfy account
+  after pending charges, refreshed after every job. Click to top up.
+- **Open in ComfyUI** on the Video and Create Character forms: download the exact workflow your settings
+  produce, open it in ComfyUI and swap in your own models, LoRAs and nodes.
 - **Preview engine**: with no Comfy configured, an ffmpeg pass approximates
-  camera, lens and grade so the whole UI is usable without a GPU or account.
+  camera, lens and grade so the UI is usable without a GPU or account.
 
 ## Requirements
 
@@ -136,6 +183,7 @@ written to logs, or stored in saved workflows.
 | `nodes/comfyui-backlot/` | ComfyUI node pack: CameraRig, LensKit, GradeLUT, Letterbox, ShotCard |
 | `examples/` | Sample clips the app preloads |
 | `deploy/` | Running the workflows on a Comfy API deployment |
+| `docs/` | [Usage guide](docs/USAGE.md) and [architecture notes](docs/ARCHITECTURE.md) |
 
 ## Keyboard
 

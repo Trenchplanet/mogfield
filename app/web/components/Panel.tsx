@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { PasteLink } from "./PasteLink";
-import { LoraPicker } from "./LoraRow";
+import { LoraPicker, LoraToggle } from "./LoraRow";
 import { DepthToggle } from "./DepthToggle";
 import { findVideoLink, type CastCard, type Clip, type DepthJob, type Render } from "../../server/shared";
 import { PRESET_LABEL } from "../camera";
@@ -10,6 +10,7 @@ import { ProVideoCard, type Trim } from "./VideoCard";
 import { BackgroundRow } from "./BackgroundRow";
 import { MentionTextarea, type MentionRef } from "./MentionTextarea";
 import { ModelPicker } from "./ModelPicker";
+import { OpenInComfy } from "./OpenInComfy";
 import type { ModelOption, Quality } from "../api";
 import { AspectPicker, ApertureRing, FocusPanel, GradePanel, LensCarousel, MovePicker } from "./CameraDept";
 import { GenerationStatus } from "./GenerationStatus";
@@ -182,10 +183,6 @@ export function ControlPanel(p: {
 
   return (
     <div className="panel">
-      <div className="panel-tabs">
-        <button className={!pro ? "on" : ""} onClick={() => p.setLevel("easy")}>Create</button>
-        <button className={pro ? "on" : ""} onClick={() => p.setLevel("pro")}>Pro</button>
-      </div>
       <div className="panel-scroll">
 
         {p.renderPreview && (
@@ -362,6 +359,7 @@ export function ControlPanel(p: {
         <button className="generate" disabled={!p.clip || p.busy} onClick={p.onGenerate} title="Generate (G)">
           {p.busy ? "Working…" : p.mode === "recast" && p.costLabel ? `Generate · ${p.costLabel}` : "Generate"}
         </button>
+        <OpenInComfy settings={() => ({ tool: "swap", mode: p.mode, model: p.model, quality: p.quality, prompt: p.prompt, characters: p.casts.filter((c) => c.kind === "character").length || 1, seconds: p.trim.end - p.trim.start, aspect: p.clip && p.clip.width < p.clip.height ? "9:16" : "16:9" })} />
         {p.mode === "recast" && (
           <button className="ghost prompt-only" onClick={p.onPromptOnly} disabled={!p.clip || p.busy}>
             Copy the prompt only (no generation)

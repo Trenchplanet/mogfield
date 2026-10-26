@@ -9,7 +9,9 @@ export const CREDITS_PER_USD = 211;
 
 export type Pricing =
   /** Seedance: credits per 1K video tokens, with video input. */
-  { kind: "seedance-tokens"; per1k: Partial<Record<Quality, number>> };
+  | { kind: "seedance-tokens"; per1k: Partial<Record<Quality, number>> }
+  /** US dollars per output second; videoIn: the reference take is billed by the second too. */
+  | { kind: "per-second"; usd: Partial<Record<Quality, number>>; videoIn?: boolean };
 
 const SHORT_SIDE: Record<Quality, number> = { "480p": 480, "720p": 720, "768p": 768, "1080p": 1080, "2K": 2048 };
 
@@ -20,6 +22,10 @@ const SHORT_SIDE: Record<Quality, number> = { "480p": 480, "720p": 720, "768p": 
  */
 export function estimateUsd(p: Pricing | undefined, o: { seconds: number; quality: Quality; aspect: number; inputVideos: number }): number | null {
   if (!p) return null;
+  if (p.kind === "per-second") {
+    const usd = p.usd[o.quality];
+    return usd === undefined ? null : usd * o.seconds * (p.videoIn ? 2 : 1);
+  }
   const rate = p.per1k[o.quality];
   if (rate === undefined) return null;
   const short = SHORT_SIDE[o.quality];

@@ -31,13 +31,18 @@ const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg"
 type Part = { text?: string; inlineData?: { mimeType: string; data: string }; fileData?: { fileUri: string } };
 
 /** One Nano Banana call: images + instruction in, one image written to outPath. */
-async function nanoBanana(images: string[], text: string, aspectRatio: string, size: SheetSize, outPath: string, signal?: AbortSignal): Promise<void> {
+function nanoBanana(images: string[], text: string, aspectRatio: string, size: SheetSize, outPath: string, signal?: AbortSignal): Promise<void> {
+  return geminiImage(SHEET_MODEL, images, text, aspectRatio, size, outPath, signal);
+}
+
+/** Any Gemini image model on the Comfy API (Nano Banana and friends). */
+export async function geminiImage(model: string, images: string[], text: string, aspectRatio: string, size: SheetSize, outPath: string, signal?: AbortSignal): Promise<void> {
   if (!process.env.COMFY_API_KEY?.trim()) throw new Error("The character studio needs COMFY_API_KEY in app/.env");
   const parts: Part[] = [];
   for (const path of images) parts.push({ inlineData: { mimeType: MIME[extname(path).toLowerCase()] ?? "image/png", data: (await readFile(path)).toString("base64") } });
   parts.push({ text });
   const result = await comfy.models.run(
-    SHEET_MODEL,
+    model,
     { contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio, imageSize: size } } },
     { signal },
   );
@@ -96,12 +101,46 @@ export function nearestRatio(aspect: number) {
 
 /** Character studio: the photo with the chosen elements added; everything else stays. */
 export function editCharacterPhoto(o: { photoPath: string; elements: string[]; note?: string; refPaths: string[]; aspect: number; outPath: string; signal?: AbortSignal }): Promise<void> {
-  const refs = o.refPaths.length
-    ? `\nThe ${o.refPaths.length > 1 ? `next ${o.refPaths.length} images are` : "second image is"} reference${o.refPaths.length > 1 ? "s" : ""} for the elements to add: copy their design, shape and colors onto the character.`
+  return nanoBanana([o.photoPath, ...o.refPaths], editPrompt(o.elements, o.note, o.refPaths.length), nearestRatio(o.aspect), "2K", o.outPath, o.signal);
+}
+
+/** The instruction for one studio edit: the elements to add, everything else kept. */
+export function editPrompt(elements: string[], note: string | undefined, refs: number): string {
+  const refLine = refs
+    ? `\nThe ${refs > 1 ? `next ${refs} images are` : "second image is"} reference${refs > 1 ? "s" : ""} for the elements to add: copy their design, shape and colors onto the character.`
     : "";
-  const list = [...o.elements, ...(o.note?.trim() ? [o.note.trim()] : [])].map((e) => `- ${e}`).join("\n");
-  const text = `Edit the first image. Keep the same character: same face, expression, pose, body, framing, background and lighting. Add or change only the following:
-${list}${refs}
+  const list = [...elements, ...(note?.trim() ? [note.trim()] : [])].map((e) => `- ${e}`).join("\n");
+  return `Edit the first image. Keep the same character: same face, expression, pose, body, framing, background and lighting. Add or change only the following:
+${list}${refLine}
 Blend every change in naturally, with matching lighting, perspective and photo quality, so it looks like one untouched photo. Create photorealistic quality, like an iPhone photo: real skin texture with pores, natural imperfections and true-to-life lighting; no plastic, waxy, airbrushed or CGI look (unless a restyle above asks for one). Keep the whole character in frame. No text, labels or borders.`;
-  return nanoBanana([o.photoPath, ...o.refPaths], text, nearestRatio(o.aspect), "2K", o.outPath, o.signal);
+}
+
+/** Agent mode: one storyboard key frame, with the cast pictures as references so faces and outfits hold across shots. */
+export function storyboardFrame(o: { prompt: string; refPaths: string[]; aspect: number; outPath: string; signal?: AbortSignal }): Promise<void> {
+  const refs = o.refPaths.length
+    ? `The attached pictures are the cast, in order: keep each person's face, hair and outfit exactly as shown. Do not copy their backgrounds. `
+    : "";
+  return nanoBanana(o.refPaths, `${refs}A single cinematic film still, photoreal, no text, no borders, no captions. ${o.prompt}`, nearestRatio(o.aspect), "1K", o.outPath, o.signal);
+}
+
+/** Restyle: a style picture described as a look (medium, colors, light, texture), never its content. */
+export async function describeStyle(image: Buffer, mime: string): Promise<string> {
+  if (!process.env.COMFY_API_KEY?.trim()) throw new Error("Reading a style picture needs COMFY_API_KEY in app/.env");
+  const model = process.env.MOGFIELD_AGENT_MODEL?.trim() || "anthropic/claude-sonnet-5-5";
+  const res = await comfy.models.run(model, {
+    max_tokens: 400,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mime, data: image.toString("base64") } },
+          { type: "text", text: "Describe only the visual style of this picture so a video model can copy it: medium, rendering technique, color palette, lighting, texture, lens and era. Do not describe the subject, people, places or text in it, and name no artist. One paragraph of comma-separated phrases, at most 60 words, no preamble." },
+        ],
+      },
+    ],
+  });
+  const data = res.data as { content?: { type: string; text?: string }[] };
+  const text = (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+  if (!text) throw new Error("No style description came back");
+  return text.slice(0, 600);
 }

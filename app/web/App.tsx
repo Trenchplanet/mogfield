@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { H3_DEFAULT_LORA, LENSES, findVideoLink, linkSource, type CastCard, type Clip, type DepthJob, type LensName, type Preparation, type PromptPack, type Render, type RenderParams } from "../server/shared";
 import { api, type Health, type ModelOption, type Quality } from "./api";
 import { estimateUsd, formatUsd } from "../server/providers/pricing";
 import { EasyPanel } from "./components/EasyPanel";
+import { AgentPage } from "./components/AgentPage";
 import { Library, type DragItem } from "./components/Library";
 import { CharacterMaker } from "./components/CharacterMaker";
 import type { Trim } from "./components/VideoCard";
@@ -14,15 +15,70 @@ import { ControlPanel } from "./components/Panel";
 import { PreparationSheet } from "./components/PreparationSheet";
 import { LibraryPage } from "./components/LibraryPage";
 import { CharacterStudio } from "./components/CharacterStudio";
-import { ReshootPage } from "./components/ReshootPage";
 import { BackendSheet } from "./components/BackendSheet";
-import { T2vPage } from "./components/T2vPage";
+import { VideoPage, type EditTool, type VideoSub } from "./components/VideoPage";
 import { RestylePage } from "./components/RestylePage";
+import { ImagePage } from "./components/ImagePage";
 import { QueueButton, QueueList, queueBusy, queueCount, queueItems, type QueueItem } from "./components/Queue";
 import { DEFAULT_DIRECTION, effective, type Direction } from "./state";
 import { saveToPhotos } from "./save";
 
-type Tab = "studio" | "how" | "library" | "characters" | "reshoot" | "t2v" | "restyle";
+type Tab = "studio" | "how" | "library" | "characters" | "video" | "agent";
+
+/** Where you are lives in the address (?page=video&sub=edit&tool=extend): reloads, links and Back land in the same place. */
+const PAGE_SLUG: Record<Tab, string> = { characters: "image", video: "video", studio: "swap", library: "library", how: "how", agent: "agent" };
+type Level = "easy" | "pro";
+type Nav = { tab: Tab; sub: VideoSub; tool: EditTool | null; level?: Level };
+function readNav(fromStorage = true): Nav {
+  let q = new URLSearchParams(location.search);
+  if (!q.get("page") && fromStorage) {
+    try {
+      q = new URLSearchParams(localStorage.getItem("mogfield.nav") ?? "");
+    } catch {
+      /* private mode */
+    }
+  }
+  const page = q.get("page");
+  // older links: the separate Text to video and Re-shoot pages now live under Video
+  if (page === "t2v") return { tab: "video", sub: "create", tool: null };
+  if (page === "reshoot") return { tab: "video", sub: "edit", tool: "reshoot" };
+  if (page === "restyle") return { tab: "video", sub: "restyle", tool: null };
+  const tab = (Object.keys(PAGE_SLUG) as Tab[]).find((t) => PAGE_SLUG[t] === page) ?? "studio";
+  const mode = q.get("mode");
+  if (tab === "studio" || tab === "how") return { tab, sub: "create", tool: null, level: mode === "pro" ? "pro" : mode === "easy" ? "easy" : undefined };
+  const tool = q.get("tool");
+  const sub = q.get("sub");
+  if (sub === "restyle") return { tab, sub, tool: null };
+  // Edit has no list page any more: it opens on Extend
+  if (sub === "edit") return { tab, sub, tool: tool === "reshoot" ? "reshoot" : "extend" };
+  return { tab, sub: "create", tool: null };
+}
+function navQuery(n: Nav): string {
+  const q = new URLSearchParams({ page: PAGE_SLUG[n.tab] });
+  if (n.tab === "video") {
+    q.set("sub", n.sub);
+    if (n.sub === "edit" && n.tool) q.set("tool", n.tool);
+  }
+  if ((n.tab === "studio" || n.tab === "how") && n.level) q.set("mode", n.level);
+  return `?${q}`;
+}
+
+/** The menu: four places, each with its own options in the bar below it. */
+const MENU: { tab: Tab; label: string }[] = [
+  { tab: "video", label: "Video" },
+  { tab: "characters", label: "Image" },
+  { tab: "studio", label: "Character Swap" },
+  { tab: "library", label: "Library" },
+  { tab: "agent", label: "Agent" },
+];
+
+/** Video's options, side by side in one bar. */
+const VIDEO_OPTIONS: { label: string; sub: VideoSub; tool: EditTool | null }[] = [
+  { label: "Create", sub: "create", tool: null },
+  { label: "Extend", sub: "edit", tool: "extend" },
+  { label: "Re-shoot", sub: "edit", tool: "reshoot" },
+  { label: "Restyle", sub: "restyle", tool: null },
+];
 
 function sameTrim(a?: { start: number; end: number }, b?: { start: number; end: number }) {
   return (!a && !b) || (!!a && !!b && Math.abs(a.start - b.start) < 0.051 && Math.abs(a.end - b.end) < 0.051);
@@ -49,6 +105,9 @@ export function App() {
   const [dir, setDir] = useState<Direction>(DEFAULT_DIRECTION);
   const [level, setLevelState] = useState<"easy" | "pro">(() => {
     try {
+      // a link to Pro opens Pro; otherwise the last one you used
+      const fromUrl = new URLSearchParams(location.search).get("mode");
+      if (fromUrl === "pro" || fromUrl === "easy") return fromUrl;
       return localStorage.getItem("backlot.level") === "pro" ? "pro" : "easy";
     } catch {
       return "easy";
@@ -102,7 +161,58 @@ export function App() {
     }
   };
   const [prompt, setPrompt] = useState("");
-  const [tab, setTab] = useState<Tab>("studio");
+  const [nav0] = useState(readNav);
+  const [tab, setTab] = useState<Tab>(nav0.tab);
+  const [videoSub, setVideoSub] = useState<VideoSub>(nav0.sub);
+  const [imageSub, setImageSub] = useState<"image" | "character">(() => {
+    try {
+      return localStorage.getItem("mogfield.imageSub") === "character" ? "character" : "image";
+    } catch {
+      return "image";
+    }
+  });
+  const goImage = (s: "image" | "character") => {
+    setImageSub(s);
+    try {
+      localStorage.setItem("mogfield.imageSub", s);
+    } catch {
+      /* private mode */
+    }
+  };
+  const [videoTool, setVideoTool] = useState<EditTool | null>(nav0.tool);
+  const goVideo = useCallback((sub: VideoSub, tool: EditTool | null) => {
+    setTab("video");
+    setVideoSub(sub);
+    setVideoTool(sub === "edit" ? tool ?? "extend" : null);
+  }, []);
+  // pages you have opened stay mounted (hidden), so their settings survive switching around
+  const [seen, setSeen] = useState<Set<Tab>>(() => new Set([nav0.tab]));
+  useEffect(() => setSeen((s) => (s.has(tab) ? s : new Set(s).add(tab))), [tab]);
+  const firstNav = useRef(true);
+  useEffect(() => {
+    const q = navQuery({ tab, sub: videoSub, tool: videoTool, level });
+    if (location.search !== q) history[firstNav.current ? "replaceState" : "pushState"](null, "", q);
+    firstNav.current = false;
+    try {
+      localStorage.setItem("mogfield.nav", q);
+    } catch {
+      /* private mode */
+    }
+  }, [tab, videoSub, videoTool, level]);
+  useEffect(() => {
+    const onPop = () => {
+      const n = readNav(false);
+      setTab(n.tab);
+      setVideoSub(n.sub);
+      setVideoTool(n.tool);
+      if (n.level) {
+        setLevelState(n.level);
+        if (n.level === "easy") setMode("recast");
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const tabRef = useRef(tab);
   tabRef.current = tab;
   const [developing, setDeveloping] = useState<{ id: string; progress: number; frame: string | null; message: string } | null>(null);
@@ -541,6 +651,7 @@ export function App() {
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       // studio shortcuts only on the studio, never under an open sheet (G starts a paid render)
       const sheetOpen = !!document.querySelector('[role=dialog], .sheet-backdrop, .library');
+      if (e.key !== "Escape" && tabRef.current !== "studio" && tabRef.current !== "how") return;
       if ((e.code === "Space" || e.key === "g" || e.key === "G") && (tabRef.current !== "studio" || sheetOpen || t.tagName === "BUTTON")) return;
       if (e.code === "Space") {
         e.preventDefault();
@@ -700,38 +811,36 @@ export function App() {
     return "My ComfyUI";
   }, [health]);
 
+  // Comfy API credits in the header while the API switch is on: every minute, and again when a job ends
+  const apiOn = !!health && health.engine !== "comfy" && health.preparation.comfyConfigured;
+  const [credits, setCredits] = useState<{ available: number; prepaid: number; pending: number } | null>(null);
+  useEffect(() => {
+    if (!apiOn) return setCredits(null);
+    const load = () => void api.credits().then(setCredits).catch(() => setCredits(null));
+    load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, [apiOn]);
+  useEffect(() => {
+    if (apiOn && !queueActive) void api.credits(true).then(setCredits).catch(() => {});
+  }, [apiOn, queueActive]);
+
+  const keep = (t: Tab, el: ReactNode) => (seen.has(t) ? <div style={{ display: tab === t ? "contents" : "none" }}>{el}</div> : null);
+
   return (
     <div className="app">
       <header className="nav">
-        <div className="brand">
+        <button className="brand" aria-label="MOGFIELD home" onClick={() => { setTab("studio"); setMenuOpen(false); setQueueOpen(false); }}>
           <span className="brand-mark" aria-hidden />
           <span className="brand-name">MOGFIELD</span>
-        </div>
+        </button>
         <nav className="nav-links">
-          <button className={tab === "studio" && level === "easy" ? "on" : ""} onClick={() => { setTab("studio"); setLevel("easy"); }}>
-            Create
-          </button>
-          <button className={tab === "studio" && level === "pro" ? "on" : ""} onClick={() => { setTab("studio"); setLevel("pro"); }}>
-            Pro
-          </button>
-          <button className={tab === "characters" ? "on" : ""} onClick={() => setTab("characters")}>
-            Character Studio
-          </button>
-          <button className={tab === "restyle" ? "on" : ""} onClick={() => setTab("restyle")}>
-            Restyle
-          </button>
-          <button className={tab === "reshoot" ? "on" : ""} onClick={() => setTab("reshoot")}>
-            Re-shoot
-          </button>
-          <button className={tab === "t2v" ? "on" : ""} onClick={() => setTab("t2v")}>
-            Text to video
-          </button>
-          <button className={tab === "library" ? "on" : ""} onClick={() => setTab("library")}>
-            Library
-          </button>
-          <button className={tab === "how" ? "on" : ""} onClick={() => setTab("how")}>
-            How it works
-          </button>
+          {MENU.map((m) => (
+            <button key={m.tab} className={tab === m.tab || (m.tab === "studio" && tab === "how") ? "on" : ""} onClick={() => setTab(m.tab)}>
+              {m.label}
+              {m.tab === "agent" && <sup className="exp-tag">Beta</sup>}
+            </button>
+          ))}
         </nav>
         <div className="nav-right">
           <div className="mode-switch" role="group" aria-label="Where workflows run" title={`${health?.target ?? "Comfy Cloud"} · change where it runs`}>
@@ -742,6 +851,17 @@ export function App() {
               <i className={health?.engine === "comfy" ? "ok" : ""} />LOCAL
             </button>
           </div>
+          {apiOn && credits && (
+            <a
+              className={`credits-pill ${credits.available < 2 ? "low" : ""}`}
+              href="https://platform.comfy.org/profile/billing"
+              target="_blank"
+              rel="noreferrer"
+              title={`Comfy API credits: $${credits.prepaid.toFixed(2)} prepaid${credits.pending ? `, $${credits.pending.toFixed(2)} still being charged` : ""}. Click to top up.`}
+            >
+              ${credits.available.toFixed(2)}
+            </a>
+          )}
           <a className="btn ghost" href={`https://${health?.repo ?? "github.com"}`} target="_blank" rel="noreferrer">
             GitHub
           </a>
@@ -758,10 +878,6 @@ export function App() {
           <button className="accent nav-share" disabled={!render || render.status !== "succeeded"} onClick={() => render && setSharing(render)}>
             Share
           </button>
-          <div className="seg level-switch" role="radiogroup" aria-label="Easy or Pro">
-            <button role="radio" aria-checked={level === "easy"} className={level === "easy" ? "on" : ""} onClick={() => setLevel("easy")}>Easy</button>
-            <button role="radio" aria-checked={level === "pro"} className={level === "pro" ? "on" : ""} onClick={() => setLevel("pro")}>Pro</button>
-          </div>
           <button className="burger" aria-label="Menu" aria-expanded={menuOpen} onClick={() => { setMenuOpen((o) => !o); setQueueOpen(false); }}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
               {menuOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
@@ -770,15 +886,7 @@ export function App() {
         </div>
         {menuOpen && (
           <div className="burger-menu" role="menu" onClick={() => setMenuOpen(false)}>
-            <button role="menuitem" onClick={() => { setTab("studio"); setLevel("easy"); }}>Create</button>
-            <button role="menuitem" onClick={() => { setTab("studio"); setLevel("pro"); }}>Pro</button>
-            <button role="menuitem" onClick={() => setTab("characters")}>Character Studio</button>
-            <button role="menuitem" onClick={() => setTab("restyle")}>Restyle</button>
-            <button role="menuitem" onClick={() => setTab("reshoot")}>Re-shoot</button>
-            <button role="menuitem" onClick={() => setTab("t2v")}>Text to video</button>
-            <button role="menuitem" onClick={() => setTab("library")}>Library</button>
             <button role="menuitem" onClick={() => setMakerOpen(true)}>Make a character</button>
-            <button role="menuitem" onClick={() => setTab("how")}>How it works</button>
             <button role="menuitem" disabled={!render || render.status !== "succeeded"} onClick={() => render && setSharing(render)}>Share</button>
             <a role="menuitem" href={`https://${health?.repo ?? "github.com"}`} target="_blank" rel="noreferrer">GitHub</a>
             <span className="burger-status">
@@ -797,7 +905,38 @@ export function App() {
         )}
       </header>
 
-      {tab === "characters" ? (
+      {(tab === "video" || tab === "studio" || tab === "how" || tab === "characters") && (
+        <nav className="subnav" aria-label={tab === "video" ? "Video options" : tab === "characters" ? "Image options" : "Character Swap options"}>
+          {tab === "characters"
+            ? ([["image", "Create Image"], ["character", "Create Character"]] as const).map(([k, label]) => (
+                <button key={k} className={imageSub === k ? "on" : ""} aria-current={imageSub === k ? "page" : undefined} onClick={() => goImage(k)}>{label}</button>
+              ))
+            : tab === "video"
+            ? VIDEO_OPTIONS.map((o) => {
+                const on = videoSub === o.sub && (o.sub !== "edit" || videoTool === o.tool);
+                return (
+                  <button key={o.label} className={on ? "on" : ""} aria-current={on ? "page" : undefined} onClick={() => goVideo(o.sub, o.tool)}>{o.label}</button>
+                );
+              })
+            : (["easy", "pro"] as const).map((l) => (
+                <button key={l} className={level === l ? "on" : ""} aria-current={level === l ? "page" : undefined} onClick={() => setLevel(l)}>{l === "easy" ? "Easy" : "Pro"}</button>
+              ))}
+        </nav>
+      )}
+
+      {keep("characters", (
+        <div style={{ display: imageSub === "image" ? "contents" : "none" }}>
+          <ImagePage
+            images={images}
+            apiMode={health?.engine !== "comfy"}
+            say={say}
+            onNewImage={(card) => setImages((xs) => [card, ...xs.filter((x) => x.id !== card.id)])}
+            onMakeCharacter={() => goImage("character")}
+          />
+        </div>
+      ))}
+      {keep("characters", (
+        <div style={{ display: imageSub === "character" ? "contents" : "none" }}>
         <CharacterStudio
           images={images}
           say={say}
@@ -809,7 +948,10 @@ export function App() {
             say(`${card.prompt} added to your characters. Add a video and Generate.`);
           }}
         />
-      ) : tab === "restyle" ? (
+        </div>
+      ))}
+      {keep("video", (
+        <div style={{ display: videoSub === "restyle" ? "contents" : "none" }}>
         <RestylePage
           clip={clip}
           trim={trim}
@@ -823,21 +965,30 @@ export function App() {
           say={say}
           onStart={startRestyle}
         />
-      ) : tab === "t2v" ? (
-        <T2vPage images={images} models={models} say={say} onNewImage={(card) => setImages((xs) => [card, ...xs.filter((x) => x.id !== card.id)])} />
-      ) : tab === "reshoot" ? (
-        <ReshootPage
+        </div>
+      ))}
+      {keep("video", (
+        <div style={{ display: videoSub === "restyle" ? "none" : "contents" }}>
+        <VideoPage
+          sub={videoSub}
+          tool={videoTool}
+          onNav={goVideo}
+          images={images}
+          onNewImage={(card) => setImages((xs) => [card, ...xs.filter((x) => x.id !== card.id)])}
+          models={models}
+          apiMode={health?.engine !== "comfy"}
           clip={clip}
           trim={trim}
-          onTrim={setTrim}
           onPickVideo={() => setLibraryFor("video")}
-          models={models}
-          renders={renders}
           clips={clips}
+          renders={renders}
           say={say}
-          onStart={startReshoot}
+          onReshoot={startReshoot}
         />
-      ) : tab === "library" ? (
+        </div>
+      ))}
+      {keep("agent", <AgentPage images={images} say={say} />)}
+      {keep("library", (
         <LibraryPage
           queue={queue}
           clips={clips}
@@ -849,7 +1000,8 @@ export function App() {
           onOpenRender={(r) => openQueueItem({ kind: "render", at: r.createdAt, render: r })}
           onOpenUploads={() => setLibraryFor("video")}
         />
-      ) : (
+      ))}
+      <div style={{ display: tab === "studio" || tab === "how" ? "contents" : "none" }}>
       <div className="workspace">
         {level === "easy" ? (
           <EasyPanel
@@ -874,8 +1026,6 @@ export function App() {
             steps={developingSteps}
             generationError={generationError ?? (render?.status === "failed" ? render.error ?? render.message : null)}
             onGenerate={onGenerate}
-            onPro={() => setLevel("pro")}
-            onTool={(id) => setTab(id)}
             onOpenLibrary={setLibraryFor}
             onDropItem={onDropItem}
             trim={trim}
@@ -1048,18 +1198,13 @@ export function App() {
             </div>
           ) : (
             <div className="how">
-              <ol className="how-steps">
-                <li><b>Upload</b> a phone video. Depth Anything V2 maps the scene.</li>
-                <li><b>Direct</b> it. The camera moves through the depth map and lens effects follow real optics.</li>
-                <li><b>Recast</b> with LTX 2.5, which fills in what the new camera angle reveals.</li>
-                <li><b>Compare</b> before and after, then share a vertical video.</li>
-              </ol>
-              <GraphView name={mode === "recast" ? "backlot_recast" : "backlot_direct"} />
+              {/* opens on the workflow behind what you have picked */}
+              <GraphView name={level === "pro" ? (mode === "recast" ? "backlot_recast" : "backlot_direct") : model.startsWith("h3:") ? "backlot_h3_swap" : "mogfield_seedance_restyle"} />
             </div>
           )}
         </main>
       </div>
-      )}
+      </div>
 
       {sharing && <ShareSheet render={sharing} repo={health?.repo ?? "github.com/OWNER/mogfield"} onClose={() => setSharing(null)} />}
       {backendOpen && (

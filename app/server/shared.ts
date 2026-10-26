@@ -49,14 +49,91 @@ export const AB_LAYOUT = {
   portrait: { a: { x: 350, y: 56, w: 600, h: 920 }, b: { x: 970, y: 56, w: 600, h: 920 } },
   landscape: { a: { x: 20, y: 260, w: 930, h: 523 }, b: { x: 970, y: 260, w: 930, h: 523 } },
 } as const;
+export type AbLayout = keyof typeof AB_LAYOUT;
 
 /** Text to video frame shapes, width / height. */
 export const T2V_ASPECTS = { "9:16": 9 / 16, "16:9": 16 / 9, "1:1": 1, "3:4": 3 / 4, "4:3": 4 / 3, "21:9": 21 / 9 } as const;
 export type T2vAspect = keyof typeof T2V_ASPECTS;
 
+export interface FrameModelSpec {
+  label: string;
+  /** the model choice inside the partner node */
+  node: string;
+  qualities: readonly string[];
+  min: number;
+  max: number;
+  needsStart: boolean;
+  /** lengths the node accepts, when it takes a list instead of any whole second */
+  durations?: readonly number[];
+  /** without frames it runs from the prompt alone, through its own text-to-video node */
+  text?: boolean;
+}
+
+const LTX_FAST_SECONDS = [2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20] as const;
+const LTX_PRO_SECONDS = [2, 3, 4, 5, 6, 8, 10] as const;
+
+/**
+ * Models that start (and optionally end) on a given frame (H3 and LTX 2.5 also from a prompt alone): Create Video with a
+ * start / end frame, and Extend Video, which starts on the take's last frame.
+ * Prices follow the nodes' own price formulas on Comfy (no input video billed).
+ */
+const FRAME_MODEL_LIST = {
+  "seedance-2-5": { label: "Seedance 2.5", node: "Seedance 2.5", qualities: ["480p", "720p", "1080p"], min: 4, max: 30, needsStart: false },
+  "seedance-2-0": { label: "Seedance 2.0", node: "Seedance 2.0", qualities: ["480p", "720p", "1080p"], min: 4, max: 15, needsStart: false },
+  "seedance-2-0-fast": { label: "Seedance 2.0 Fast", node: "Seedance 2.0 Fast", qualities: ["480p", "720p"], min: 4, max: 15, needsStart: false },
+  "seedance-2-0-mini": { label: "Seedance 2.0 Mini", node: "Seedance 2.0 Mini", qualities: ["480p", "720p"], min: 4, max: 15, needsStart: false },
+  wan3: { label: "Wan 3.0", node: "wan3.0-video", qualities: ["480p", "720p", "1080p"], min: 2, max: 30, needsStart: true },
+  "wan3-prime": { label: "Wan 3.0 Prime", node: "wan3.0-video-prime", qualities: ["480p", "720p", "1080p"], min: 2, max: 30, needsStart: true },
+  h3: { label: "MiniMax H3", node: "MiniMax H3", qualities: ["768p", "2k"], min: 4, max: 15, needsStart: false, text: true },
+  "ltx-2-5-fast": { label: "LTX 2.5 Fast", node: "LTX-2.5 (Fast)", qualities: ["720p", "1080p"], min: 2, max: 20, needsStart: false, text: true, durations: LTX_FAST_SECONDS },
+  "ltx-2-5-pro": { label: "LTX 2.5 Pro", node: "LTX-2.5 (Pro)", qualities: ["720p", "1080p"], min: 2, max: 10, needsStart: false, text: true, durations: LTX_PRO_SECONDS },
+} as const;
+export const FRAME_MODELS: Record<keyof typeof FRAME_MODEL_LIST, FrameModelSpec> = FRAME_MODEL_LIST;
+export type FrameModel = keyof typeof FRAME_MODELS;
+
+/** The lengths a frame model can make, in whole seconds. */
+export function frameLengths(model: FrameModel): number[] {
+  const m = FRAME_MODELS[model];
+  return m.durations ? [...m.durations] : Array.from({ length: m.max - m.min + 1 }, (_, i) => m.min + i);
+}
+
+/** The nearest length the model can make. */
+export function snapSeconds(model: FrameModel, seconds: number): number {
+  return frameLengths(model).reduce((best, x) => (Math.abs(x - seconds) < Math.abs(best - seconds) ? x : best));
+}
+
+export function frameModelUsd(model: FrameModel, quality: string, seconds: number): number {
+  const d = seconds;
+  if (model === "seedance-2-5") {
+    const perFrame = quality === "480p" ? 400.3125 : quality === "1080p" ? 2025 : 900;
+    return (Math.floor(perFrame * (24 * d + 1)) / 1000) * (quality === "1080p" ? 0.016731 : 0.015301);
+  }
+  if (model.startsWith("seedance")) {
+    const rate = quality === "480p" ? 10044 : quality === "1080p" ? 48800 : 21600;
+    const price = quality === "1080p" ? 0.011011 : model.endsWith("mini") ? 0.005005 : model.endsWith("fast") ? 0.008008 : 0.01001;
+    return (d * rate * price) / 1000;
+  }
+  if (model === "h3") return d * (quality === "2k" ? 0.1859 : 0.1287);
+  if (model.startsWith("ltx")) {
+    const hd = quality === "1080p";
+    return d * (model === "ltx-2-5-pro" ? (hd ? 0.2431 : 0.1716) : hd ? 0.1859 : 0.1287);
+  }
+  const pps = model === "wan3-prime" ? { "480p": 0.09724, "720p": 0.2002, "1080p": 0.4004 } : { "480p": 0.0715, "720p": 0.143, "1080p": 0.286 };
+  return d * (pps[quality as keyof typeof pps] ?? pps["720p"]);
+}
+
 /** A Text to video take: a new shot from a prompt and optional reference images. */
 export interface T2vTake {
   id: string;
+  /** t2v: prompt (+ reference images); frames: from a start and/or end frame; extend: continues a take from its last frame. */
+  kind?: "t2v" | "frames" | "extend";
+  startFrameId?: string;
+  endFrameId?: string;
+  /** Extend: the take that was continued, and up to where. */
+  clipId?: string;
+  from?: number;
+  /** Extend: the original and the continuation as one video. */
+  joinedUrl?: string;
   prompt: string;
   imageIds: string[];
   model: string;
@@ -206,6 +283,8 @@ export interface CastCard {
   createdAt: number;
 }
 
+export type RecastEngine = "ltx" | "seedance";
+
 export interface PromptPack {
   prompt: string;
   negative: string;
@@ -315,3 +394,72 @@ export const H3_LORAS = [
   { id: "none", label: "No LoRA (base H3)", by: "", file: "", url: "" },
 ] as const;
 export const H3_DEFAULT_LORA = "akatz-swap-v1.5";
+
+/* ------------------------------------------------------------------ Agent mode (experimental) */
+
+/** One storyboard key frame on Nano Banana 2.1 at 1K, thinking included (the node's own price, rounded up). */
+export const AGENT_FRAME_USD = 0.06;
+
+export interface AgentShot {
+  id: string;
+  title: string;
+  /** shot size: EWS, WS, MWS, MS, MCU, CU, ECU, insert */
+  size: string;
+  /** camera angle: eye level, low, high, overhead, Dutch, POV, over-the-shoulder */
+  angle: string;
+  /** camera movement: static, push in, pull out, pan, tilt, dolly, tracking, crane, handheld, orbit */
+  movement: string;
+  lens: string;
+  lighting: string;
+  seconds: number;
+  action: string;
+  sound: string;
+  /** what the key frame shows: one still image prompt */
+  framePrompt: string;
+  /** what the video model does from that frame */
+  videoPrompt: string;
+  /** cast ids (library pictures) in this shot, in order */
+  cast: string[];
+  frame?: { status: "running" | "succeeded" | "failed"; url?: string; error?: string };
+  frameApproved?: boolean;
+  takeId?: string;
+  /** waiting for a free filming slot */
+  queued?: boolean;
+}
+
+export interface AgentBoard {
+  title: string;
+  logline: string;
+  /** the look, repeated in every frame and video prompt so the film holds together */
+  style: string;
+  aspect: T2vAspect;
+  model: FrameModel;
+  quality: string;
+  audio: boolean;
+  /** who is in the film: a name and the look the prompts use for them, plus the library picture */
+  characters: { name: string; look: string; castId?: string }[];
+  shots: AgentShot[];
+}
+
+export type AgentStage = "brief" | "board" | "frames" | "shots" | "film";
+
+export interface AgentMessage {
+  role: "user" | "agent";
+  text: string;
+  questions?: string[];
+  at: number;
+}
+
+export interface AgentProject {
+  id: string;
+  title: string;
+  stage: AgentStage;
+  messages: AgentMessage[];
+  board?: AgentBoard;
+  /** library pictures the user attached as cast */
+  castIds: string[];
+  thinking?: boolean;
+  film?: { status: "running" | "succeeded" | "failed"; url?: string; error?: string };
+  createdAt: number;
+  updatedAt: number;
+}

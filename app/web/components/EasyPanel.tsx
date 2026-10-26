@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PasteLink } from "./PasteLink";
-import { LoraToggle } from "./LoraRow";
+import { LoraPicker, LoraToggle } from "./LoraRow";
 import { DepthToggle } from "./DepthToggle";
 import { findVideoLink, type CastCard, type Clip } from "../../server/shared";
 import type { ModelOption, Quality } from "../api";
@@ -9,9 +9,9 @@ import { EasyVideoCard, type Trim } from "./VideoCard";
 import { BackgroundRow } from "./BackgroundRow";
 import { MentionTextarea, type MentionRef } from "./MentionTextarea";
 import { ModelPicker } from "./ModelPicker";
+import { OpenInComfy } from "./OpenInComfy";
 import { GenerationStatus } from "./GenerationStatus";
 import { saveToPhotos } from "../save";
-import { ToolCards, type ToolId } from "./ToolCards";
 
 function Icon({ d, size = 18 }: { d: string; size?: number }) {
   return (
@@ -54,8 +54,6 @@ export function EasyPanel(p: {
   /** Checklist of the take being generated. */
   steps?: import("../../server/shared").JobStep[];
   onGenerate: () => void;
-  onPro: () => void;
-  onTool: (id: ToolId) => void;
   onOpenLibrary: (target: "video" | "image") => void;
   onDropItem: (item: DragItem) => void;
   trim: Trim;
@@ -133,11 +131,6 @@ export function EasyPanel(p: {
 
   return (
     <div className="panel easy" ref={panel}>
-      <div className="panel-tabs">
-        <button className="on">Create</button>
-        <button onClick={p.onPro}>Pro</button>
-      </div>
-
       <div className="panel-scroll">
         {p.renderPreview && (
           <section className="panel-result-preview" aria-label="Generated video preview">
@@ -148,7 +141,6 @@ export function EasyPanel(p: {
             <video src={p.renderPreview.url} controls playsInline preload="auto" />
           </section>
         )}
-        <ToolCards active="studio" onPick={p.onTool} />
 
         {p.clip ? (
           <div className={`drop-card big has ${over === "video" ? "over" : ""}`} {...dropProps("video")}>
@@ -219,6 +211,7 @@ export function EasyPanel(p: {
 
         <ModelPicker models={p.models} model={p.model} setModel={p.setModel} quality={p.quality} setQuality={p.setQuality} />
         {current?.loras && <LoraToggle loras={current.loras} lora={p.lora} setLora={p.setLora} />}
+        <OpenInComfy settings={() => ({ tool: "swap", mode: "recast", model: p.model, quality: p.quality, prompt: p.promptOn ? p.prompt : "", characters: p.characters.length || 1, seconds: p.trim.end - p.trim.start, aspect: p.clip && p.clip.width < p.clip.height ? "9:16" : "16:9" })} />
       </div>
 
       <div className="panel-foot">

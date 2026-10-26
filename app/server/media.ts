@@ -109,3 +109,50 @@ export async function restoreSourceAudio(source: string, output: string): Promis
 }
 
 export { run as exec };
+
+/** One frame at full size as a PNG, `at` seconds in (the last frame: duration minus one frame). */
+export async function frameAt(video: string, at: number, out: string): Promise<void> {
+  await run("ffmpeg", ["-y", "-v", "error", "-ss", String(Math.max(0, at)), "-i", video, "-frames:v", "1", out]);
+}
+
+/**
+ * The original take up to `aEnd`, then the continuation without its first frame
+ * (that frame is the original's last). The continuation is fitted to the
+ * original's size and frame rate; a side without sound gets silence.
+ */
+export async function joinContinuation(a: string, aEnd: number, b: string, out: string): Promise<void> {
+  const [pa, pb] = await Promise.all([probe(a), probe(b)]);
+  const fps = Math.round(pa.fps * 1000) / 1000;
+  const w = pa.width;
+  const h = pa.height;
+  const fit = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p`;
+  const aDur = Math.min(aEnd, pa.duration);
+  const bDur = Math.max(0, pb.duration - 1 / pb.fps);
+  const silence = (d: number, label: string) => `anullsrc=r=48000:cl=stereo,atrim=0:${d.toFixed(3)}[${label}]`;
+  const graph = [
+    `[0:v]trim=0:${aDur.toFixed(3)},setpts=PTS-STARTPTS,${fit}[va]`,
+    `[1:v]trim=start_frame=1,setpts=PTS-STARTPTS,${fit}[vb]`,
+    pa.hasAudio ? `[0:a]atrim=0:${aDur.toFixed(3)},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo[aa]` : silence(aDur, "aa"),
+    pb.hasAudio ? `[1:a]atrim=start=${(1 / pb.fps).toFixed(4)},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo[ab]` : silence(bDur, "ab"),
+    `[va][aa][vb][ab]concat=n=2:v=1:a=1[v][a]`,
+  ].join(";");
+  await run("ffmpeg", ["-y", "-v", "error", "-i", a, "-i", b, "-filter_complex", graph, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]);
+}
+
+/** Agent mode: shots one after another as one film, each fitted to the first shot's size; a shot without sound gets silence. */
+export async function concatShots(paths: string[], out: string): Promise<void> {
+  const ps = await Promise.all(paths.map((p) => probe(p)));
+  const { width: w, height: h } = ps[0];
+  const fit = `scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},setsar=1,fps=24,format=yuv420p`;
+  const parts: string[] = [];
+  const pairs: string[] = [];
+  ps.forEach((p, i) => {
+    // video models often wobble in a clip's last frames: leave out its last 0.12 s
+    const d = Math.max(0.5, p.duration - 0.12).toFixed(3);
+    parts.push(`[${i}:v]trim=0:${d},setpts=PTS-STARTPTS,${fit}[v${i}]`);
+    parts.push(p.hasAudio ? `[${i}:a]asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:${d},afade=t=out:st=${(Number(d) - 0.04).toFixed(3)}:d=0.04[a${i}]` : `anullsrc=r=48000:cl=stereo,atrim=0:${d}[a${i}]`);
+    pairs.push(`[v${i}][a${i}]`);
+  });
+  const graph = [...parts, `${pairs.join("")}concat=n=${ps.length}:v=1:a=1[v][a]`].join(";");
+  await run("ffmpeg", ["-y", "-v", "error", ...paths.flatMap((p) => ["-i", p]), "-filter_complex", graph, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]);
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PromptPack, Render } from "../../server/shared";
 import { api } from "../api";
 import { PRESET_LABEL } from "../camera";
@@ -22,10 +22,49 @@ const OUTLINE: Graph = {
   "9": { class_type: "SaveVideo", inputs: { images: ["8", 0] }, _meta: { title: "BL:output" } },
 };
 
-export function GraphView({ name }: { name: string }) {
+/** The workflows behind MOGFIELD, each one a ComfyUI graph you can open and run yourself. */
+export const WORKFLOWS: { name: string; label: string; line: string }[] = [
+  { name: "backlot_h3_swap", label: "Character swap · H3", line: "Your video and character go into MiniMax H3, which films the same motion again with your character in it." },
+  { name: "mogfield_seedance_restyle", label: "Character swap · Seedance", line: "The video and your character pictures go to Seedance as references: same motion, new person." },
+  { name: "backlot_genjustsu_sam", label: "Person masks · SAM 3", line: "Tracks the person you picked through every shot, so only they get swapped." },
+  { name: "backlot_depth", label: "Depth map", line: "Depth Anything V2 turns each frame into depth: the motion without the look." },
+  { name: "mogfield_seedance_reshoot", label: "Re-shoot", line: "Seedance reads the whole take and films the same moment from a new camera angle." },
+  { name: "mogfield_seedance_t2v", label: "Text to video", line: "A prompt and optional reference pictures straight into Seedance." },
+  { name: "backlot_recast", label: "Recast · LTX 2.5 (local)", line: "Runs on your own GPU: the depth guides LTX 2.5 through an IC-LoRA while your references set the look." },
+  { name: "backlot_direct", label: "Camera & lens (local)", line: "A virtual camera move, lens and colour grade through the depth map, no AI generation." },
+];
+
+/** Stages, the way you would group a ComfyUI graph. A node goes to the first stage whose test matches; `at` is the column, left to right. */
+const STAGES: { key: string; label: string; tint: string; at: number; test: RegExp }[] = [
+  { key: "in", label: "Inputs", at: 0, tint: "48,209,88", test: /^(LoadVideo|LoadImage|LoadAudio|GetVideoComponents|GetImageSize)$/ },
+  { key: "out", label: "Output", at: 5, tint: "255,55,95", test: /Decode|CreateVideo|^Save|Letterbox|GradeLUT|LensKit|CameraRig|VideoOutput|MaskToImage|SeparateAVLatent|CropGuides/ },
+  { key: "models", label: "Models", at: 1, tint: "152,152,157", test: /Loader|LoRA|SigmaShift|LoadSAM/i },
+  { key: "prep", label: "Prepare", at: 2, tint: "255,159,10", test: /Resize|Trim|FromBatch|RepeatImage|Depth|Mask|Preprocessor|Segmentation|Propagate|Upscale/i },
+  { key: "prompt", label: "Prompt", at: 3, tint: "191,90,242", test: /TextEncode|Conditioning|Guide|Prompt/i },
+  { key: "gen", label: "Generate", at: 4, tint: "10,132,255", test: /./ },
+];
+
+/** "ResizeImageMaskNode" -> "Resize Image Mask"; our "BL:" titles name what the node is for. */
+function nodeName(cls: string, title?: string) {
+  if (title && !title.startsWith("BL:")) return title;
+  return cls.replace(/Node(V\d)?$|Api$/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+}
+/** Up to two short settings worth seeing on the card (model, resolution, length…). */
+function nodeFacts(inputs: Record<string, unknown>) {
+  return Object.entries(inputs)
+    .filter(([k, v]) => (typeof v === "string" || typeof v === "number" || typeof v === "boolean") && !/seed|prompt|filename|watermark|format|codec/i.test(k) && String(v).length < 28)
+    .slice(0, 2)
+    .map(([k, v]) => `${k.replace(/^model\./, "")}: ${String(v)}`);
+}
+
+export function GraphView({ name: initial }: { name: string }) {
+  const [name, setName] = useState(initial);
+  useEffect(() => setName(initial), [initial]);
   const [graph, setGraph] = useState<Graph | null>(null);
   const [installed, setInstalled] = useState(true);
+  const [hover, setHover] = useState<string | null>(null);
   useEffect(() => {
+    setGraph(null);
     void api.workflow(name).then((g) => {
       setInstalled(!!g);
       setGraph(g ?? OUTLINE);
@@ -49,54 +88,103 @@ export function GraphView({ name }: { name: string }) {
       return v;
     };
     ids.forEach((id) => d(id));
-    const cols = new Map<number, string[]>();
-    ids.forEach((id) => cols.set(depth.get(id)!, [...(cols.get(depth.get(id)!) ?? []), id]));
-    const pos = new Map<string, { x: number; y: number }>();
-    const W = 170, H = 62;
-    for (const [c, list] of cols) list.forEach((id, i) => pos.set(id, { x: 20 + c * W, y: 20 + i * H + (c % 2) * 18 }));
-    const edges = ids.flatMap((id) => deps(id).map((s) => ({ from: pos.get(s)!, to: pos.get(id)! })));
-    const width = 40 + cols.size * W;
-    const height = 60 + Math.max(...[...cols.values()].map((l) => l.length)) * H;
-    return { pos, edges, width, height };
+    const stageOf = (id: string) => STAGES.findIndex((s) => s.test.test(graph[id].class_type));
+    const lanes = STAGES.map((s, i) => ({ ...s, ids: ids.filter((id) => stageOf(id) === i).sort((a, b) => depth.get(a)! - depth.get(b)! || Number(a) - Number(b)) })).filter((l) => l.ids.length).sort((a, b) => a.at - b.at);
+    const lane = new Map(lanes.flatMap((l, i) => l.ids.map((id) => [id, i] as const)));
+    const edges = ids.flatMap((id) => deps(id).map((from) => ({ from, to: id }))).filter((e) => lane.get(e.from) !== lane.get(e.to));
+    return { lanes, edges };
   }, [graph]);
 
-  if (!graph || !layout) return <div className="graph-view">Loading graph…</div>;
+  // wires are drawn between the cards' measured positions
+  const box = useRef<HTMLDivElement>(null);
+  const [wires, setWires] = useState<{ from: string; to: string; d: string }[]>([]);
+  useLayoutEffect(() => {
+    const root = box.current;
+    if (!root || !layout) return;
+    const draw = () => {
+      const o = root.getBoundingClientRect();
+      const at = (id: string) => root.querySelector<HTMLElement>(`[data-node="${id}"]`)?.getBoundingClientRect();
+      setWires(
+        layout.edges.flatMap((e) => {
+          const a = at(e.from);
+          const b = at(e.to);
+          if (!a || !b) return [];
+          const back = a.left > b.left;
+          const x1 = (back ? a.left : a.right) - o.left + root.scrollLeft;
+          const y1 = a.top + a.height / 2 - o.top + root.scrollTop;
+          const x2 = (back ? b.right : b.left) - o.left + root.scrollLeft;
+          const y2 = b.top + b.height / 2 - o.top + root.scrollTop;
+          const k = Math.max(30, Math.abs(x2 - x1) * 0.45) * (back ? -1 : 1);
+          return [{ ...e, d: `M${x1},${y1} C${x1 + k},${y1} ${x2 - k},${y2} ${x2},${y2}` }];
+        }),
+      );
+    };
+    draw();
+    const ro = new ResizeObserver(draw);
+    ro.observe(root);
+    return () => ro.disconnect();
+  }, [layout]);
+
   const download = () => {
+    if (!graph) return;
     const blob = new Blob([JSON.stringify(graph, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `${name}.json`;
     a.click();
   };
+  const meta = WORKFLOWS.find((w) => w.name === name);
+  const linked = (id: string) => !hover || id === hover || wires.some((w) => (w.from === hover && w.to === id) || (w.to === hover && w.from === id));
   return (
     <div className="graph-view">
+      <div className="wf-pick" role="tablist" aria-label="Workflow">
+        {WORKFLOWS.map((w) => (
+          <button key={w.name} role="tab" aria-selected={w.name === name} className={w.name === name ? "on" : ""} onClick={() => setName(w.name)}>{w.label}</button>
+        ))}
+      </div>
       <div className="graph-head">
-        <span>{installed ? `workflows/${name}.json` : "Pipeline outline (workflow not installed yet)"}</span>
-        {installed && (
+        <span>
+          <b>{meta?.label ?? name}</b>
+          {meta && <small>{meta.line}</small>}
+        </span>
+        {installed && graph && (
           <button onClick={download} title="Drop the file onto ComfyUI to open it">
             Open in ComfyUI ↗
           </button>
         )}
       </div>
-      <div className="graph-scroll">
-        <svg width={layout.width} height={layout.height}>
-          {layout.edges.map((e, i) => (
-            <path key={i} className="edge" d={`M${e.from.x + 140},${e.from.y + 20} C${e.from.x + 160},${e.from.y + 20} ${e.to.x - 20},${e.to.y + 20} ${e.to.x},${e.to.y + 20}`} />
+      {!graph || !layout ? (
+        <div className="wf-loading">Loading graph…</div>
+      ) : (
+        <div className="wf-canvas" ref={box}>
+          <svg className={`wf-wires ${wires.length > 24 ? "busy" : ""}`} aria-hidden>
+            {wires.map((w, i) => (
+              <path key={i} d={w.d} className={hover && (w.from === hover || w.to === hover) ? "on" : hover ? "dim" : ""} />
+            ))}
+          </svg>
+          {layout.lanes.map((l, i) => (
+            <section key={l.key} className="wf-lane" style={{ ["--tint" as string]: l.tint }}>
+              <header>
+                <span>{i + 1}</span>
+                <b>{l.label}</b>
+                <small>{l.ids.length}</small>
+              </header>
+              {l.ids.map((id) => {
+                const n = graph[id];
+                const ours = n.class_type.startsWith("Backlot") || n._meta?.title?.startsWith("BL:");
+                return (
+                  <div key={id} data-node={id} className={`wf-node ${ours ? "ours" : ""} ${linked(id) ? "" : "dim"}`} onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover(null)} title={`#${id} ${n.class_type}`}>
+                    <b>{nodeName(n.class_type, n._meta?.title)}</b>
+                    <small>{n.class_type}</small>
+                    {nodeFacts(n.inputs).map((f) => <em key={f}>{f}</em>)}
+                  </div>
+                );
+              })}
+            </section>
           ))}
-          {Object.entries(graph).map(([id, n]) => {
-            const p = layout.pos.get(id)!;
-            const ours = n.class_type.startsWith("Backlot");
-            const ltx = /LTX/i.test(n.class_type);
-            return (
-              <g key={id} transform={`translate(${p.x},${p.y})`} className={`node ${ours ? "ours" : ""} ${ltx ? "ltx" : ""}`}>
-                <rect width="140" height="40" rx="6" />
-                <text x="8" y="16" className="node-class">{n.class_type.length > 22 ? n.class_type.slice(0, 21) + "…" : n.class_type}</text>
-                <text x="8" y="31" className="node-title">#{id} {n._meta?.title ?? ""}</text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
+        </div>
+      )}
+      {!installed && <div className="wf-note">Workflow not installed yet: showing the pipeline outline.</div>}
     </div>
   );
 }

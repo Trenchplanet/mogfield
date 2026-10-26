@@ -1,10 +1,11 @@
 import { comfyRouter } from "./comfyRouter.js";
 import { comfyWorkflow } from "./comfyWorkflow.js";
 import { h3Cloud } from "./h3Cloud.js";
+import { refVideo } from "./refVideo.js";
 import type { ModelOption, Provider } from "./types.js";
 
 // Order = order in the model picker. Add new providers (fal, BytePlus, …) here.
-export const PROVIDERS: Provider[] = [h3Cloud, comfyRouter, comfyWorkflow];
+export const PROVIDERS: Provider[] = [h3Cloud, comfyRouter, refVideo, comfyWorkflow];
 
 export async function listModels(): Promise<ModelOption[]> {
   const lists = await Promise.all(PROVIDERS.map((p) => p.models().catch(() => [] as ModelOption[])));

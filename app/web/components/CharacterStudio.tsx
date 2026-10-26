@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { OpenInComfy } from "./OpenInComfy";
 import type { CastCard } from "../../server/shared";
 import { api } from "../api";
 
@@ -113,7 +114,7 @@ export function CharacterStudio(p: { images: CastCard[]; onNewCards: (cards: Cas
   const hasPhoto = !!photoUrl;
 
   // recent pictures to start from (not boards)
-  const recent = useMemo(() => p.images.filter((i) => /\((photo|studio)\)$/.test(i.prompt)).slice(0, 12), [p.images]);
+  const recent = useMemo(() => p.images.filter((i) => /\((photo|studio|image)\)$/.test(i.prompt)).slice(0, 12), [p.images]);
 
   useEffect(() => {
     if (!busy) return;
@@ -149,7 +150,7 @@ export function CharacterStudio(p: { images: CastCard[]; onNewCards: (cards: Cas
   const startFromCard = (c: CastCard) => {
     setFile(null);
     setBase(c);
-    if (!name) setName(c.prompt.replace(/\s*\((photo|studio)\)$/, "").slice(0, 40));
+    if (!name) setName(c.prompt.replace(/\s*\((photo|studio|image)\)$/, "").slice(0, 40));
     reset();
   };
   const toggle = (label: string) => setPicked((xs) => (xs.includes(label) ? xs.filter((x) => x !== label) : [...xs, label]));
@@ -217,6 +218,7 @@ export function CharacterStudio(p: { images: CastCard[]; onNewCards: (cards: Cas
         <div>
           <h2>Character Studio</h2>
           <p>Start from a photo, add what you want, check the picture, then turn it into a character board for your videos.</p>
+          <OpenInComfy say={p.say} settings={() => ({ tool: "image", elements: picked.map((l) => ADD_BY_LABEL.get(l) ?? l), prompt: note })} />
         </div>
         <ol className="cs-steps" aria-label="Steps">
           {["Photo", "Add elements", "Picture", "Character board"].map((s, i) => (

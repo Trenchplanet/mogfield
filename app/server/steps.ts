@@ -30,6 +30,15 @@ export const H3_STEPS: StepDef[] = [
   { key: "finish", label: "Download and restore your audio", where: "mac" },
 ];
 
+/** Wan 3.0 / MiniMax H3 reference to video: the take and the picture go straight to the node. */
+export const REFV_STEPS: StepDef[] = [
+  { key: "inputs", label: "Prepare video and picture", where: "mac" },
+  { key: "upload", label: "Upload to Comfy Cloud", where: "mac" },
+  { key: "queue", label: "Waiting in the Comfy queue", where: "comfy" },
+  { key: "generate", label: "The model is generating", where: "comfy" },
+  { key: "finish", label: "Download and restore your audio", where: "mac" },
+];
+
 export function makeSteps(defs: StepDef[]): JobStep[] {
   return defs.map((d) => ({ ...d, state: "pending" as StepState }));
 }

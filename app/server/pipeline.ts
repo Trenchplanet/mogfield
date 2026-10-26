@@ -1,4 +1,4 @@
-import type { ReshootAngle } from "./shared.js";
+import { RESHOOT_ANGLES, type ReshootAngle } from "./shared.js";
 // Mogfield's automatic Recast: video + characters in, video out. No prompt
 // from the user — every step below is our logic.
 //
@@ -90,6 +90,7 @@ export async function runRecast(i: PipelineInput, hooks: PipelineHooks) {
   if (option && i.duration > option.maxSeconds + 0.5)
     throw new Error(`${option.label} makes up to ${option.maxSeconds} s. Trim your video to ${option.maxSeconds} s or less.`);
   if (target.provider.id === "h3") return runH3Swap(i, target, hooks);
+  if (target.provider.id === "refv") return runRefVideo(i, target, hooks);
   const textOnlyLtx = target.provider.id === "comfy" && target.model.startsWith("ltx/ltx-2-5-");
   const miniMaxH3 = target.provider.id === "comfy" && target.model === "minimax/minimax-h3";
 
@@ -239,6 +240,67 @@ async function runH3Swap(i: PipelineInput, target: NonNullable<ReturnType<typeof
       aspect: i.width / i.height,
       outPath: i.outPath,
       lora: i.lora,
+      seed: i.seed,
+    },
+    { progress: hooks.progress, step: hooks.step, signal: hooks.signal },
+  );
+  hooks.step?.("finish", "running", "putting your original audio back");
+  await restoreSourceAudio(i.clipPath, i.outPath);
+  hooks.step?.("finish", "done");
+  return { pack: { prompt, negative: "", uploads: [], timeline: [] }, draftTaskId: undefined };
+}
+
+/** The take itself as @Video1 for Wan 3.0 / MiniMax H3 reference to video:
+ *  a character swap, a restyle (in words, or after @Image1) or a re-shoot. */
+export function buildRefVideoPrompt(o: { characters: number; restyle?: boolean; reshoot?: ReshootAngle; style?: string; setting?: string; direction?: string; keepScene?: boolean }): string {
+  const extra = [o.style && `Visual style: ${o.style}`, o.setting && `Setting: ${o.setting}`, o.direction && `Direction: ${o.direction}`]
+    .filter(Boolean)
+    .map((x) => String(x).trim().replace(/([^.!?])$/, "$1."))
+    .join(" ");
+  const keep = "Keep the exact motion, timing, action and performance of @Video1 in one continuous take.";
+  if (o.reshoot)
+    return `The same moment as @Video1, filmed again from a new camera position: ${RESHOOT_ANGLES[o.reshoot].camera}. Same people with the same faces, hair and clothes, same place, same lighting. ${keep} ${extra}`.trim();
+  if (o.restyle) return `Restyle @Video1 in the look of @Image1: its people, world, colours and visual style. ${keep} Same framing and camera movement. ${extra}`.trim();
+  if (!o.characters) return `Restyle @Video1 completely: new look for the people, the place and the picture. ${keep} Same framing and camera movement. ${extra}`.trim();
+  // tested on Wan 3.0: without this the background of the picture slowly takes over the scene
+  const scene = o.keepScene
+    ? "Only the person changes: the place, background, other people, props, lighting and colours stay exactly as in @Video1 for the whole video. Take nothing from the background of @Image1. "
+    : "";
+  return `Completely replace the main person in @Video1 with the person from @Image1, exactly as they look in @Image1: face, hair, skin, body and clothing; nothing of the original person's look remains. Clothing @Image1 does not show is completed plainly so they are fully dressed. ${scene}${o.characters > 1 ? "@Image1 is a sheet of characters left to right; the most prominent person becomes the leftmost character, the next the second, and so on. " : ""}${keep} Same camera movement and framing as @Video1. ${extra}`.trim();
+}
+
+async function runRefVideo(i: PipelineInput, target: NonNullable<ReturnType<typeof providerFor>>, hooks: PipelineHooks) {
+  if (!i.characters.length && !i.reshoot && !i.style) throw new Error(i.restyle ? "Add a picture to restyle after." : "Add a character: the character swap needs a picture of who to put in the video.");
+  // one picture goes in as-is; several share one sheet, left to right
+  let sheetPath: string | null = null;
+  if (i.characters.length > 1 && !i.restyle) {
+    hooks.progress(0.03, "Building reference sheet");
+    sheetPath = join(RENDER_DIR, `${i.renderId}-sheet.png`);
+    await buildSheet(i.characters.map((c) => c.path), sheetPath);
+  }
+  hooks.step?.("inputs", "done");
+  const prompt = buildRefVideoPrompt({
+    characters: Math.min(4, i.characters.length),
+    restyle: i.restyle,
+    reshoot: i.reshoot,
+    style: i.style,
+    setting: i.keepBackground ? undefined : i.background,
+    keepScene: i.keepBackground,
+    direction: i.scene?.replace(/@image(\d+)/gi, (_m, n) => `@Image${n}`).replace(/@video\d*/gi, "@Video1"),
+  });
+  await target.provider.generate(
+    {
+      model: target.model,
+      clipPath: i.clipPath,
+      depthPath: "",
+      sheetPath,
+      characterPath: sheetPath ? undefined : i.characters[0]?.path,
+      prompt,
+      negative: "",
+      quality: i.quality,
+      duration: i.duration,
+      aspect: i.width / i.height,
+      outPath: i.outPath,
       seed: i.seed,
     },
     { progress: hooks.progress, step: hooks.step, signal: hooks.signal },

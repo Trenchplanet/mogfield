@@ -30,3 +30,6 @@ __pycache__/
 # local tooling and tunnels
 .cloudflared/
 *.tunnel
+
+# local assistant and editor settings
+.claude/

@@ -13,11 +13,14 @@ import {
 import { depthPath, generateDepth } from "./depth.js";
 import { prepareGenjustsu, preparationUrls, readWavSamples, sameSamples, sourceAudioSamples, verifyPreparation, type PreparationResult } from "./genjustsu.js";
 import { adoptLegacyPreparations, loadPreparations, persistPreparation, type SourceCandidate } from "./preparationStore.js";
-import { failRunning, finishAll, H3_STEPS, makeSteps, PREPARATION_STEPS, SEEDANCE_STEPS, setStep } from "./steps.js";
-import { editCharacterPhoto, fluxCard, makeCharacterSheet, type SheetSize } from "./characters.js";
+import { exportWorkflow, type ExportRequest } from "./workflowExport.js";
+import { agentRoutes } from "./agent.js";
+import { failRunning, finishAll, H3_STEPS, makeSteps, PREPARATION_STEPS, REFV_STEPS, SEEDANCE_STEPS, setStep } from "./steps.js";
+import { describeStyle, editCharacterPhoto, fluxCard, geminiImage, makeCharacterSheet, nearestRatio, SHEET_MODEL, type SheetSize } from "./characters.js";
+import { catalogModel, catalogModels, runCatalogModel } from "./providers/catalog.js";
 import { downloadLink } from "./links.js";
 import { checkBackend, currentBackend, loadBackend, saveBackend, type Backend } from "./backend.js";
-import { listTakes, startTake } from "./t2v.js";
+import { isFrameModel, listTakes, startExtend, startFramesTake, startTake } from "./t2v.js";
 
 // the backend picked in the app (data/backend.json) wins over the .env default
 loadBackend();
@@ -29,7 +32,7 @@ import { comfyCast, comfyEngine } from "./engines/comfy.js";
 import { previewEngine } from "./engines/preview.js";
 import type { Engine } from "./engines/types.js";
 import { exec, ffmpegWithProgress, normalise, poster, probe, restoreSourceAudio, trimVideo } from "./media.js";
-import { AB_LAYOUT, RESHOOT_ANGLES, T2V_ASPECTS, type T2vAspect,
+import { AB_LAYOUT, FRAME_MODELS, snapSeconds, RESHOOT_ANGLES, T2V_ASPECTS, type T2vAspect,
   ASPECTS, CAMERA_PRESETS, H3_LORAS, LENSES, linkSource, type CastCard, type Clip, type DepthJob, type Preparation, type Render, type RenderEvent, type RenderParams,
 } from "./shared.js";
 
@@ -781,7 +784,7 @@ app.post("/api/renders", async (c) => {
   const id = randomUUID().slice(0, 8);
   const r: Render = {
     id, params, status: "queued", progress: 0, message: "Queued", engine: ENGINE, createdAt: Date.now(), take: ++takeCounter,
-    ...(target?.provider.id === "comfy" ? { steps: makeSteps(SEEDANCE_STEPS) } : target?.provider.id === "h3" ? { steps: makeSteps(H3_STEPS) } : {}),
+    ...(target?.provider.id === "comfy" ? { steps: makeSteps(SEEDANCE_STEPS) } : target?.provider.id === "h3" ? { steps: makeSteps(H3_STEPS) } : target?.provider.id === "refv" ? { steps: makeSteps(REFV_STEPS) } : {}),
   };
   renders.set(id, r);
   saveLibrary(); // a queued take survives a restart (as interrupted) and shows in the queue
@@ -1068,15 +1071,140 @@ app.post("/api/t2v", async (c) => {
   const b = (await c.req.json().catch(() => ({}))) as { prompt?: unknown; imageIds?: unknown; model?: unknown; quality?: unknown; seconds?: unknown; aspect?: unknown; audio?: unknown };
   const prompt = typeof b.prompt === "string" ? b.prompt.trim().slice(0, 6000) : "";
   if (!prompt) return c.json({ error: "describe the shot" }, 400);
-  const model = (await listModels()).find((m) => m.id === b.model && m.available && /seedance/.test(m.id));
-  if (!model) return c.json({ error: "pick a Seedance model that is available on your Comfy API account" }, 400);
+  // a curated Seedance model, or any video model in the Comfy API catalog ("comfy:<provider>/<model>")
+  const curated = (await listModels()).find((m) => m.id === b.model && m.available && /seedance/.test(m.id));
+  const listed = !curated && typeof b.model === "string" ? catalogModel(b.model.replace(/^comfy:/, "")) : undefined;
+  if (listed?.needs) return c.json({ error: `${listed.label}: ${listed.needs.toLowerCase()}, so it cannot run from Create` }, 400);
+  const model = curated ?? (listed?.outputs.includes("video") ? { id: `comfy:${listed.id}`, qualities: ["480p", "720p", "1080p"], maxSeconds: 30 } : undefined);
+  if (!model) return c.json({ error: "pick a video model that is available on your Comfy API account" }, 400);
   const quality = typeof b.quality === "string" && (model.qualities as string[]).includes(b.quality) ? b.quality : model.qualities[0];
-  const seconds = typeof b.seconds === "number" && Number.isFinite(b.seconds) ? Math.round(Math.min(model.maxSeconds, Math.max(4, b.seconds))) : 5;
+  const seconds = typeof b.seconds === "number" && Number.isFinite(b.seconds) ? Math.round(Math.min(model.maxSeconds, Math.max(curated ? 4 : 1, b.seconds))) : 5;
   const aspect = typeof b.aspect === "string" && b.aspect in T2V_ASPECTS ? (b.aspect as T2vAspect) : "9:16";
   const images = (Array.isArray(b.imageIds) ? b.imageIds : []).filter((x): x is string => typeof x === "string").map((id) => casts.get(id)).filter((x): x is NonNullable<typeof x> => !!x).slice(0, 4);
   const capped = consumeRenderCap(c);
   if (capped) return c.json({ error: capped }, 429);
-  return c.json(startTake({ prompt, imageIds: images.map((i) => i.id), imagePaths: images.map((i) => i.path), model: model.id, quality, seconds, aspect, audio: b.audio !== false }));
+  return c.json(startTake({ prompt, imageIds: images.map((i) => i.id), imagePaths: images.map((i) => i.path), model: model.id, quality, seconds, aspect, audio: b.audio !== false, catalog: !curated }));
+});
+
+// Comfy API credits for the header: what is left after charges still pending. Cached for 20 s.
+let credits: { at: number; body: unknown } | null = null;
+app.get("/api/credits", async (c) => {
+  const key = process.env.COMFY_API_KEY?.trim();
+  if (!key) return c.json({ error: "no COMFY_API_KEY" }, 404);
+  if (credits && Date.now() - credits.at < 20_000 && c.req.query("fresh") === undefined) return c.json(credits.body);
+  try {
+    const r = await fetch("https://api.comfy.org/customers/balance", { headers: { "X-API-KEY": key }, signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) return c.json({ error: `Comfy answered HTTP ${r.status}` }, 502);
+    const b = (await r.json()) as { effective_balance_cents?: number; prepaid_balance_cents?: number; pending_charges_cents?: number; cloud_credit_balance_cents?: number; currency?: string };
+    const usd = (x?: number) => Math.round(x ?? 0) / 100;
+    const body = { available: usd(b.effective_balance_cents), prepaid: usd(b.prepaid_balance_cents), pending: usd(b.pending_charges_cents), cloud: usd(b.cloud_credit_balance_cents), currency: b.currency ?? "usd" };
+    credits = { at: Date.now(), body };
+    return c.json(body);
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 502);
+  }
+});
+
+// The whole Comfy API catalog: every model that makes a video or a picture from a prompt.
+app.get("/api/catalog", (c) => c.json(catalogModels(c.req.query("output") === "image" ? "image" : "video")));
+
+// Create Image: a prompt (+ up to 4 reference pictures) through any image model in the catalog.
+app.post("/api/image", async (c) => {
+  const b = (await c.req.json().catch(() => ({}))) as { prompt?: unknown; model?: unknown; imageIds?: unknown; aspect?: unknown; quality?: unknown };
+  const prompt = typeof b.prompt === "string" ? b.prompt.trim().slice(0, 4000) : "";
+  if (!prompt) return c.json({ error: "describe the picture" }, 400);
+  const id0 = typeof b.model === "string" && b.model ? b.model : SHEET_MODEL;
+  const listed = catalogModel(id0);
+  if (id0 !== SHEET_MODEL && !listed?.outputs.includes("image")) return c.json({ error: "pick an image model from the list" }, 400);
+  if (listed?.needs) return c.json({ error: `${listed.label}: ${listed.needs.toLowerCase()}, so it cannot run from Create Image` }, 400);
+  const images = (Array.isArray(b.imageIds) ? b.imageIds : []).filter((x): x is string => typeof x === "string").map((x) => casts.get(x)).filter((x): x is NonNullable<typeof x> => !!x).slice(0, 4);
+  const aspect = typeof b.aspect === "string" && b.aspect in T2V_ASPECTS ? T2V_ASPECTS[b.aspect as T2vAspect] : 1;
+  const capped = studioCap(c);
+  if (capped) return c.json({ error: capped }, 429);
+  const id = randomUUID().slice(0, 8);
+  const path = join(UPLOAD_DIR, `cast-${id}.png`);
+  try {
+    // Gemini image models take a contents/parts request the schema filler does not write
+    if (id0.startsWith("vertexai/")) await geminiImage(id0, images.map((i) => i.path), prompt, nearestRatio(aspect), b.quality === "1K" ? "1K" : "2K", path, c.req.raw.signal);
+    else await runCatalogModel({ model: id0, output: "image", prompt, imagePaths: images.map((i) => i.path), quality: typeof b.quality === "string" ? b.quality : "1080p", aspect, outPath: path }, { progress: () => {}, signal: c.req.raw.signal });
+  } catch (e) {
+    return upstreamError(c, e);
+  }
+  const card = { id, kind: "character" as const, prompt: `${prompt.replace(/\s+/g, " ").slice(0, 60)} (image)`, url: `/media/uploads/${basename(path)}`, engine: ENGINE, path, saved: true, createdAt: Date.now() };
+  casts.set(id, card);
+  saveLibrary();
+  return c.json(publicCast(card));
+});
+
+// Restyle: a style picture turned into words for the Style box.
+app.post("/api/style/describe", async (c) => {
+  const body = await c.req.parseBody();
+  if (!(body.file instanceof File) || !body.file.type.startsWith("image/")) return c.json({ error: "add a picture" }, 400);
+  try {
+    return c.json({ style: await describeStyle(Buffer.from(await body.file.arrayBuffer()), body.file.type) });
+  } catch (e) {
+    return upstreamError(c, e);
+  }
+});
+
+const nearestAspect = (ratio: number) => (Object.keys(T2V_ASPECTS) as T2vAspect[]).reduce((best, k) => (Math.abs(T2V_ASPECTS[k] - ratio) < Math.abs(T2V_ASPECTS[best] - ratio) ? k : best), "9:16");
+
+// Start / end frame video: a clip that starts on one picture and/or lands on another.
+app.post("/api/frames", async (c) => {
+  const b = (await c.req.json().catch(() => ({}))) as { prompt?: unknown; startId?: unknown; endId?: unknown; model?: unknown; quality?: unknown; seconds?: unknown; aspect?: unknown; audio?: unknown };
+  if (!isFrameModel(b.model)) return c.json({ error: "pick a model" }, 400);
+  const card = (x: unknown) => (typeof x === "string" ? casts.get(x) : undefined);
+  const start = card(b.startId);
+  const end = card(b.endId);
+  if (!start && !end && !FRAME_MODELS[b.model].text) return c.json({ error: "add a start frame or an end frame" }, 400);
+  if (FRAME_MODELS[b.model].needsStart && !start) return c.json({ error: `${FRAME_MODELS[b.model].label} needs a start frame` }, 400);
+  // H3 and LTX take an end frame only next to a start frame
+  if (end && !start && FRAME_MODELS[b.model].text) return c.json({ error: `${FRAME_MODELS[b.model].label} needs a start frame to use an end frame` }, 400);
+  const prompt = typeof b.prompt === "string" ? b.prompt.trim().slice(0, 6000) : "";
+  if (!prompt) return c.json({ error: "describe what happens" }, 400);
+  // with a frame the shape comes from the frame, so models that name their size get the right one
+  const frame = start ?? end;
+  const size = frame ? await probe(frame.path).catch(() => null) : null;
+  const aspect = size ? nearestAspect(size.width / size.height) : typeof b.aspect === "string" && b.aspect in T2V_ASPECTS ? (b.aspect as T2vAspect) : "9:16";
+  const capped = consumeRenderCap(c);
+  if (capped) return c.json({ error: capped }, 429);
+  return c.json(
+    startFramesTake({
+      prompt, model: b.model, quality: typeof b.quality === "string" ? b.quality : "720p",
+      // the length that actually runs, so History shows it
+      seconds: snapSeconds(b.model, Math.min(FRAME_MODELS[b.model].max, Math.max(FRAME_MODELS[b.model].min, typeof b.seconds === "number" ? b.seconds : 5))),
+      aspect, audio: b.audio !== false,
+      start: start && { id: start.id, path: start.path }, end: end && { id: end.id, path: end.path },
+    }),
+  );
+});
+
+// Extend: continue a take from its last frame, then join the two.
+app.post("/api/extend", async (c) => {
+  const b = (await c.req.json().catch(() => ({}))) as { clipId?: unknown; takeId?: unknown; from?: unknown; prompt?: unknown; model?: unknown; quality?: unknown; seconds?: unknown; audio?: unknown };
+  // the source: an uploaded video, or a finished take (an extended one continues from its joined video)
+  let clip: { id: string; path: string; duration: number; width: number; height: number } | undefined = typeof b.clipId === "string" ? clips.get(b.clipId) : undefined;
+  if (!clip && typeof b.takeId === "string") {
+    const t = listTakes().find((x) => x.id === b.takeId && x.status === "succeeded");
+    const url = t?.joinedUrl ?? t?.url;
+    if (t && url) {
+      const path = join(RENDER_DIR, basename(url));
+      const pr = await probe(path).catch(() => null);
+      if (pr) clip = { id: `take:${t.id}`, path, duration: pr.duration, width: pr.width, height: pr.height };
+    }
+  }
+  if (!clip) return c.json({ error: "pick a video to extend" }, 400);
+  if (!isFrameModel(b.model)) return c.json({ error: "pick a model" }, 400);
+  const from = typeof b.from === "number" && Number.isFinite(b.from) ? Math.min(clip.duration, Math.max(0.2, b.from)) : clip.duration;
+  const aspect = nearestAspect(clip.width / clip.height);
+  const capped = consumeRenderCap(c);
+  if (capped) return c.json({ error: capped }, 429);
+  return c.json(
+    startExtend({
+      clipId: clip.id, clipPath: clip.path, from, prompt: typeof b.prompt === "string" ? b.prompt.trim().slice(0, 4000) : "", model: b.model,
+      quality: typeof b.quality === "string" ? b.quality : "720p", seconds: typeof b.seconds === "number" ? b.seconds : 5, aspect, audio: b.audio !== false,
+    }),
+  );
 });
 
 // Where workflows run. GET checks the current choice; POST with test: true only
@@ -1095,12 +1223,27 @@ app.post("/api/backend", async (c) => {
 
 app.get("/api/luts", async (c) => c.json((await readdir(LUT_DIR)).filter((f) => f.endsWith(".cube")).sort()));
 
+// Open in ComfyUI: the graph a tool would run with the settings on screen
+app.post("/api/workflow-export", async (c) => {
+  const b = (await c.req.json().catch(() => ({}))) as ExportRequest;
+  if (!["create", "extend", "reshoot", "restyle", "swap", "image"].includes(b.tool)) return c.json({ error: "unknown tool" }, 400);
+  for (const k of ["prompt", "style", "setting"] as const) if (typeof b[k] === "string") b[k] = b[k].slice(0, 6000);
+  try {
+    return c.json(await exportWorkflow(b));
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400);
+  }
+});
+
 app.get("/api/workflows/:name", async (c) => {
   const name = c.req.param("name").replace(/[^a-z0-9_-]/gi, "");
   const p = join(WORKFLOW_DIR, `${name}.json`);
   if (!existsSync(p)) return c.json({ error: "not installed" }, 404);
   return c.body(await readFile(p, "utf8"), 200, { "content-type": "application/json" });
 });
+
+// Agent mode (experimental): a director that storyboards, then films after each approval
+agentRoutes(app, (id) => casts.get(id));
 
 app.use("/luts/*", serveStatic({ root: LUT_DIR, rewriteRequestPath: (p) => p.replace(/^\/luts/, "") }));
 app.use("/media/*", serveStatic({ root: DATA_DIR, rewriteRequestPath: (p) => p.replace(/^\/media/, "") }));

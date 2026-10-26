@@ -1,6 +1,17 @@
 import type { BackendStatus } from "../server/backend";
-import type { T2vAspect, T2vTake } from "../server/shared";
+import type { ExportRequest } from "../server/workflowExport";
+import type { AgentProject, AgentShot, FrameModel, T2vAspect, T2vTake } from "../server/shared";
 import type { CastCard, Clip, DepthJob, PersonBox, Preparation, PromptPack, Render, RenderEvent, RenderParams } from "../server/shared";
+
+export type AgentSummary = { id: string; title: string; stage: AgentProject["stage"]; updatedAt: number; thumb?: string };
+export type AgentShotView = AgentShot & { take?: { status: T2vTake["status"]; progress: number; message: string; url?: string; error?: string } };
+export type AgentView = Omit<AgentProject, "board"> & {
+  board?: Omit<NonNullable<AgentProject["board"]>, "shots"> & { shots: AgentShotView[] };
+  quote: { frames: number; shots: number };
+  director: string;
+};
+const agentPost = (url: string, body: unknown) =>
+  fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => j<AgentView>(r));
 
 async function j<T>(res: Response): Promise<T> {
   const body = await res.json().catch(() => ({}));
@@ -63,6 +74,8 @@ async function getJob<T>(url: string): Promise<T | null> {
 }
 
 export type { ModelOption, Quality } from "../server/providers/types";
+export type { CatalogModel } from "../server/providers/catalog";
+import type { CatalogModel } from "../server/providers/catalog";
 import type { ModelOption } from "../server/providers/types";
 
 export interface Health {
@@ -105,8 +118,37 @@ export const api = {
     fetch(`/api/renders/${renderId}/ab`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ overlay }) }).then((r) => j<{ url: string }>(r)),
   /** Text to video takes, newest first. */
   t2vTakes: () => fetch("/api/t2v").then((r) => j<T2vTake[]>(r)),
+  frames: (body: { prompt: string; startId?: string; endId?: string; model: FrameModel; quality: string; seconds: number; aspect: T2vAspect; audio: boolean }) =>
+    fetch("/api/frames", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => j<T2vTake>(r)),
+  extend: (body: { clipId?: string; takeId?: string; from: number; prompt: string; model: FrameModel; quality: string; seconds: number; audio: boolean }) =>
+    fetch("/api/extend", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => j<T2vTake>(r)),
   t2v: (body: { prompt: string; imageIds: string[]; model: string; quality: string; seconds: number; aspect: T2vAspect; audio: boolean }) =>
     fetch("/api/t2v", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => j<T2vTake>(r)),
+  /** Comfy API credits left, in dollars (available = prepaid − pending charges). */
+  credits: (fresh = false) => fetch(`/api/credits${fresh ? "?fresh" : ""}`).then((r) => j<{ available: number; prepaid: number; pending: number; cloud: number; currency: string }>(r)),
+  /** Every Comfy API model that makes a video (or a picture) from a prompt. */
+  catalog: (output: "video" | "image") => fetch(`/api/catalog?output=${output}`).then((r) => j<{ ready: boolean; models: CatalogModel[] }>(r)),
+  image: (body: { prompt: string; model: string; imageIds: string[]; aspect: T2vAspect }) =>
+    fetch("/api/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => j<CastCard>(r)),
+  describeStyle(file: File) {
+    const fd = new FormData();
+    fd.append("file", file);
+    return fetch("/api/style/describe", { method: "POST", body: fd }).then((r) => j<{ style: string }>(r));
+  },
+  /** Agent mode (experimental): projects with a director, a storyboard and approvals. */
+  agentList: () => fetch("/api/agent").then((r) => j<AgentSummary[]>(r)),
+  agentNew: () => fetch("/api/agent", { method: "POST" }).then((r) => j<AgentView>(r)),
+  agentGet: (id: string) => fetch(`/api/agent/${id}`).then((r) => j<AgentView>(r)),
+  agentDelete: (id: string) => fetch(`/api/agent/${id}`, { method: "DELETE" }).then((r) => j<{ ok: boolean }>(r)),
+  agentSay: (id: string, text: string, castIds: string[]) => agentPost(`/api/agent/${id}/message`, { text, castIds }),
+  agentBoard: (id: string, patch: Record<string, unknown>) =>
+    fetch(`/api/agent/${id}/board`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<AgentView>(r)),
+  agentFrames: (id: string, shotIds?: string[]) => agentPost(`/api/agent/${id}/frames`, { shotIds }),
+  agentApprove: (id: string, shotId: string, approved: boolean) => agentPost(`/api/agent/${id}/shots/${shotId}/approve`, { approved }),
+  agentFilm: (id: string, shotIds?: string[]) => agentPost(`/api/agent/${id}/film`, { shotIds }),
+  /** The ComfyUI graph a tool would run with these settings (Open in ComfyUI). */
+  workflowExport: (body: ExportRequest) =>
+    fetch("/api/workflow-export", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => j<{ name: string; graph: Record<string, unknown> }>(r)),
   backend: () => fetch("/api/backend").then((r) => j<BackendStatus>(r)),
   /** Check a target without switching (test), or switch to it. */
   setBackend: (b: { target: "cloud" | "custom"; url?: string; test?: boolean }) =>

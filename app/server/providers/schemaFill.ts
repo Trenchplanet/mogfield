@@ -118,10 +118,12 @@ function nearestResolution(values: unknown[], quality: string, aspect: number): 
   return best;
 }
 
-function fillValue(doc: Doc, name: string, s: Schema, v: FillValues, used: Set<string>): unknown {
+function fillValue(doc: Doc, name: string, s: Schema, v: FillValues, used: Set<string>, parent = ""): unknown {
   const n = name.toLowerCase();
   if (n.includes("negative")) return isStr(s) && v.negative ? v.negative : undefined;
-  if ((n === "prompt" || n === "text" || n.endsWith("_prompt") || n === "description") && isStr(s)) return v.prompt;
+  if ((n === "prompt" || n === "text" || n.endsWith("_prompt") || n === "description" || n === "prompttext" || n === "positiveprompt" || n === "instruction") && isStr(s)) return v.prompt;
+  // { image: { url } } and the like
+  if ((n === "url" || n === "uri") && isStr(s) && parent.includes("image")) return v.imageUrls[0];
   if (n === "generate_audio" && s.type === "boolean") return !!v.audioUrls?.length;
   if (n === "fps" && isNum(s) && v.fps) return s.type === "integer" ? Math.round(v.fps) : v.fps;
   if (n.includes("video")) {
@@ -154,7 +156,10 @@ function fillValue(doc: Doc, name: string, s: Schema, v: FillValues, used: Set<s
     if (isStr(s)) return String(Math.round(v.duration));
     return undefined;
   }
-  if (n.includes("aspect") && v.aspect && s.enum?.length) return nearestEnum(s.enum, v.aspect, ratio);
+  if ((n.includes("aspect") || n === "ratio") && v.aspect && s.enum?.length) {
+    // "1280:720"-style ratios are sizes: pick by shape
+    return nearestEnum(s.enum, v.aspect, ratio);
+  }
   void used;
   return undefined;
 }
@@ -170,30 +175,36 @@ export function fillBody(doc: Doc, values: FillValues): FillResult {
   if (!root?.properties) throw new Error("model schema has no JSON request body");
   const missing: string[] = [];
   const filled: string[] = [];
-  const walk = (s: Schema, path: string, depth: number): Record<string, unknown> => {
+  const walk = (s: Schema, path: string, depth: number, missing: string[]): Record<string, unknown> => {
     const out: Record<string, unknown> = {};
     for (const [name, raw] of Object.entries(s.properties ?? {})) {
       const p = resolve(doc, raw);
       if (!p) continue;
       const full = path ? `${path}.${name}` : name;
+      const required = !!s.required?.includes(name);
       if (p.type === "object" && p.properties && depth < 3) {
-        const inner = walk(p, full, depth + 1);
-        if (Object.keys(inner).length) out[name] = inner;
-        else if (s.required?.includes(name)) missing.push(full);
+        // an optional object we cannot fill is left out, along with what it would require
+        const innerMissing: string[] = [];
+        const inner = walk(p, full, depth + 1, innerMissing);
+        if (Object.keys(inner).length && (!innerMissing.length || required)) out[name] = inner;
+        if (required) missing.push(...(Object.keys(inner).length ? innerMissing : innerMissing.length ? innerMissing : [full]));
         continue;
       }
-      const val = fillValue(doc, name, p, values, new Set());
+      const val = fillValue(doc, name, p, values, new Set(), path.toLowerCase());
       if (val !== undefined) {
         out[name] = val;
         filled.push(full);
-      } else if (s.required?.includes(name)) {
+      } else if (required) {
+        // a required choice nobody asked about: its default, or the first option
         if (p.default !== undefined) out[name] = p.default;
+        else if (name.toLowerCase() === "seed" && isNum(p)) out[name] = Math.floor(Math.random() * Math.min(p.maximum ?? 2 ** 31 - 1, 2 ** 31 - 1));
+        else if (p.enum?.length && !/video|mask|audio|lang/i.test(name)) out[name] = p.enum[0];
         else missing.push(full);
       }
     }
     return out;
   };
-  const body = walk(root, "", 0);
+  const body = walk(root, "", 0, missing);
   return { body, missing, filled };
 }
 
