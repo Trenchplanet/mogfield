@@ -38,9 +38,13 @@ you can try the whole interface for free.
 
 ## Screenshots
 
-| Video | Restyle | Image |
-| --- | --- | --- |
-| <img src="docs/media/video.png" alt="Video create page"> | <img src="docs/media/restyle.png" alt="Restyle page"> | <img src="docs/media/image.png" alt="Image create page"> |
+| Character Swap | Video |
+| --- | --- |
+| <img src="docs/media/swap.png" alt="Character Swap page"> | <img src="docs/media/video.png" alt="Video create page"> |
+
+| Restyle | Image |
+| --- | --- |
+| <img src="docs/media/restyle.png" alt="Restyle page"> | <img src="docs/media/image.png" alt="Image create page"> |
 
 ## What you can do
 
