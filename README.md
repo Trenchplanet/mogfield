@@ -16,6 +16,12 @@ It is a Vite + React web app with a small Hono server. The browser never talks
 to ComfyUI and never sees your key: the server binds your take and settings to
 the workflow, submits it, and streams progress back.
 
+<p align="center">
+  <img src="docs/media/demo.gif" alt="A cat knight, generated with MOGFIELD" width="480">
+</p>
+
+<p align="center"><sub>Generated with MOGFIELD. <a href="docs/media/demo.mp4">Watch the MP4</a>.</sub></p>
+
 ## Quick start
 
 ```bash
@@ -29,6 +35,12 @@ npm run build && npm start
 Open http://localhost:8787. With a key the header shows **API** and your
 remaining Comfy credits; without one the app runs its ffmpeg preview engine so
 you can try the whole interface for free.
+
+## Screenshots
+
+| Video | Restyle | Image |
+| --- | --- | --- |
+| <img src="docs/media/video.png" alt="Video create page"> | <img src="docs/media/restyle.png" alt="Restyle page"> | <img src="docs/media/image.png" alt="Image create page"> |
 
 ## What you can do
 
