@@ -1,20 +1,28 @@
 # MOGFIELD
 
-**One phone take in. A recast, restyled, re-shot video out.**
+**Making AI video and images as easy as it gets, for anyone.**
 
-MOGFIELD is an open-source AI film studio built on the Comfy platform. Every
-generation runs as a ComfyUI workflow, either on **Comfy Cloud** ("API" mode) or
-on **your own ComfyUI** ("LOCAL" mode), through [`@comfyorg/sdk`](https://www.npmjs.com/package/@comfyorg/sdk).
-The workflows are plain JSON files in [`workflows/`](workflows/), so you can open,
-inspect and change exactly what runs.
+MOGFIELD is an open-source studio that puts the best AI video and image models
+behind one simple screen. Add a video or a few pictures, pick a look, press
+Generate. The ComfyUI workflow behind every tool is already built and wired for
+you, so there's nothing to set up before you can make something.
 
-The aim: anyone can paste a Comfy API key and start generating in a minute,
-while people with their own GPU keep full control, mixing and matching their
-own models in the workflows.
+One switch decides where it runs:
 
-It is a Vite + React web app with a small Hono server. The browser never talks
-to ComfyUI and never sees your key: the server binds your take and settings to
-the workflow, submits it, and streams progress back.
+- **API:** paste a Comfy API key and you're generating in a minute, with nothing
+  to install. Your jobs run on Comfy Cloud.
+- **LOCAL:** point MOGFIELD at your own ComfyUI and everything runs on your own
+  GPU, with your own models.
+
+Under the hood, every tool is a ready-made ComfyUI workflow (plain JSON in
+[`workflows/`](workflows/)), mapped to its category: Video, Image, Character
+Swap, Restyle and so on. Start simple, and whenever you want more control, open
+the exact workflow for that tool in ComfyUI and change it.
+
+It is a Vite + React web app with a small Hono server, using
+[`@comfyorg/sdk`](https://www.npmjs.com/package/@comfyorg/sdk). The browser
+never talks to ComfyUI and never sees your key: the server binds your take and
+settings to the workflow, submits it, and streams progress back.
 
 <p align="center">
   <img src="docs/media/demo.gif" alt="A cat knight, generated with MOGFIELD" width="480">
@@ -25,7 +33,7 @@ the workflow, submits it, and streams progress back.
 ## Quick start
 
 ```bash
-git clone https://github.com/<you>/mogfield.git
+git clone https://github.com/Trenchplanet/mogfield.git
 cd mogfield/app
 npm install
 cp .env.example .env     # paste your Comfy API key after COMFY_API_KEY=
