@@ -30,6 +30,11 @@ settings to the workflow, submits it, and streams progress back.
 
 <p align="center"><sub>Generated with MOGFIELD. <a href="docs/media/demo.mp4">Watch the MP4</a>.</sub></p>
 
+## ComfyUI challenge
+
+MOGFIELD is my submission for the ComfyUI challenge: an open-source take on a
+simple, all-in-one AI video studio, built on ComfyUI workflows and the Comfy API.
+
 ## Quick start
 
 ```bash
