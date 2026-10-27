@@ -1342,3 +1342,26 @@ button.lp-tile:hover:not(:disabled) { background: var(--card); }
 .credits-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #34c759; }
 .credits-pill.low::before { background: #ff9f0a; }
 .credits-pill:hover { background: var(--fill, rgba(255,255,255,0.12)); }
+
+/* 3D angle picker (Re-shoot) */
+.a3d { background: var(--card); border-radius: var(--r); padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+.a3d.off { opacity: 0.5; }
+.a3d-head { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.a3d-head b { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
+.a3d-head span { color: var(--text); font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a3d-reset { font-size: 11px; padding: 4px 10px; border-radius: 99px; background: var(--card-2); color: var(--text-2); }
+.a3d-stage { width: 100%; height: auto; display: block; background: var(--surface); border-radius: var(--r-sm); touch-action: none; cursor: grab; outline: none; user-select: none; }
+.a3d-stage:active { cursor: grabbing; }
+.a3d-stage:focus-visible { box-shadow: 0 0 0 2px var(--blue); }
+.a3d-ring { fill: none; stroke: rgba(235, 235, 245, 0.28); stroke-width: 1.5; }
+.a3d-arc { fill: none; stroke: rgba(235, 235, 245, 0.45); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.a3d-plane { fill: var(--card-2); stroke: rgba(235, 235, 245, 0.35); stroke-width: 1; }
+.a3d-orig { fill: rgba(235, 235, 245, 0.5); }
+.a3d-tag { fill: var(--text-3); font-size: 9px; }
+.a3d-drop { stroke: rgba(10, 132, 255, 0.45); stroke-width: 1; stroke-dasharray: 2 3; }
+.a3d-foot { fill: rgba(10, 132, 255, 0.6); }
+.a3d-beam { stroke: rgba(10, 132, 255, 0.55); stroke-width: 1.2; }
+.a3d-cam { fill: var(--blue); stroke: #fff; stroke-width: 2; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6)); }
+.a3d-lens { fill: #fff; }
+.a3d-dist { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; font-size: 11px; color: var(--text-2); }
+.a3d-dist input { width: 100%; }

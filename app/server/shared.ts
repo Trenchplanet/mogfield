@@ -42,6 +42,68 @@ export const RESHOOT_ANGLES = {
 } as const;
 export type ReshootAngle = keyof typeof RESHOOT_ANGLES;
 
+/** A free re-shoot viewpoint on a sphere around the subject (the 3D angle picker).
+ *  azimuth: degrees round from the original camera, positive to the viewer's right (-180..180).
+ *  elevation: degrees above eye level, negative looks up from below (-30..90).
+ *  distance: 0 tight, 1 wide. */
+export interface ReshootView {
+  azimuth: number;
+  elevation: number;
+  distance: number;
+}
+export const DEFAULT_VIEW: ReshootView = { azimuth: 0, elevation: 0, distance: 0.5 };
+/** Where each preset puts the camera, so picking a preset moves the 3D picker to match. */
+export const ANGLE_VIEW: Record<ReshootAngle, ReshootView> = {
+  orbit_left: { azimuth: -70, elevation: 0, distance: 0.5 },
+  orbit_right: { azimuth: 70, elevation: 0, distance: 0.5 },
+  low_angle: { azimuth: 0, elevation: -22, distance: 0.45 },
+  high_angle: { azimuth: 0, elevation: 40, distance: 0.55 },
+  overhead: { azimuth: 0, elevation: 90, distance: 0.6 },
+  closeup: { azimuth: 0, elevation: 0, distance: 0.05 },
+  wide: { azimuth: 0, elevation: 8, distance: 1 },
+  behind: { azimuth: 180, elevation: 0, distance: 0.5 },
+  profile: { azimuth: 90, elevation: 0, distance: 0.5 },
+  drone: { azimuth: 0, elevation: 55, distance: 1 },
+};
+
+/** The nearest preset, so every place that only knows RESHOOT_ANGLES keeps working. */
+export function nearestAngle(v: ReshootView): ReshootAngle {
+  const az = Math.abs(v.azimuth);
+  if (v.elevation >= 75) return "overhead";
+  if (v.elevation >= 25) return "high_angle";
+  if (v.elevation <= -12) return "low_angle";
+  if (az >= 140) return "behind";
+  if (az >= 55) return "profile";
+  if (az >= 20) return v.azimuth < 0 ? "orbit_left" : "orbit_right";
+  return v.distance <= 0.25 ? "closeup" : v.distance >= 0.75 ? "wide" : "orbit_right";
+}
+
+/** The new camera position in words the video model follows. */
+export function viewCamera(v: ReshootView): string {
+  const az = Math.round(Math.abs(v.azimuth));
+  const side = v.azimuth < 0 ? "left" : "right";
+  const where =
+    az < 12 ? "straight on, where the original camera stood"
+    : az >= 168 ? "directly behind the main subject, looking over their shoulder in the direction they face"
+    : az >= 100 ? `round behind the main subject, about ${az} degrees to the ${side} of the original camera`
+    : az >= 70 ? `square to the main subject's ${side === "left" ? "right" : "left"} side, about ${az} degrees to the ${side} of the original camera`
+    : `a three-quarter view, about ${az} degrees to the ${side} of the original camera`;
+  const e = v.elevation;
+  const height =
+    e >= 75 ? "looking straight down from directly above, a top-down bird's-eye view"
+    : e >= 45 ? "raised high above head height and looking steeply down at the subject"
+    : e >= 12 ? "raised above head height and looking down at the subject"
+    : e <= -12 ? "close to the ground and looking up at the subject, a heroic low-angle shot"
+    : "at eye level";
+  const range = v.distance <= 0.25 ? "a tight shot on the subject's face and upper body" : v.distance >= 0.75 ? "pulled far back so the whole place around the subject is in view" : "a medium shot that frames the whole subject";
+  return `the camera stands ${where}, ${height}, ${range}; it always keeps the main subject in frame`;
+}
+
+/** The camera sentence for a re-shoot: the free viewpoint when there is one, else the preset's. */
+export function reshootCamera(angle: ReshootAngle, view?: ReshootView): string {
+  return view ? viewCamera(view) : RESHOOT_ANGLES[angle].camera;
+}
+
 /** 16:9 A/B export: where the original (a) and the result (b) sit in the 1920x1080
  *  frame. Portrait takes stand side by side full height; landscape takes get two
  *  16:9 panes. The browser draws the labels at the same boxes. */
@@ -195,6 +257,8 @@ export interface RenderParams {
   style?: string;
   /** Re-shoot: film the same moment again from a RESHOOT_ANGLES viewpoint. Needs useDepth false. */
   reshoot?: ReshootAngle;
+  /** Re-shoot: a free viewpoint from the 3D angle picker; `reshoot` then holds the nearest preset. */
+  reshootView?: ReshootView;
   seed: number;
 }
 

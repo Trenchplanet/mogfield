@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { FRAME_MODELS, RESHOOT_ANGLES, T2V_ASPECTS, frameLengths, frameModelUsd, snapSeconds, type CastCard, type Clip, type FrameModel, type Render, type ReshootAngle, type T2vAspect, type T2vTake } from "../../server/shared";
+import { ANGLE_VIEW, FRAME_MODELS, RESHOOT_ANGLES, nearestAngle, T2V_ASPECTS, frameLengths, frameModelUsd, snapSeconds, type CastCard, type Clip, type FrameModel, type Render, type ReshootAngle, type ReshootView, type T2vAspect, type T2vTake } from "../../server/shared";
 import { estimateUsd, formatUsd } from "../../server/providers/pricing";
 import { api, type CatalogModel, type ModelOption, type Quality } from "../api";
 import { saveToPhotos } from "../save";
 import { ANGLE_ICON, Icon } from "./AngleIcons";
+import { Angle3D } from "./Angle3D";
 import { OpenInComfy } from "./OpenInComfy";
 import type { Trim } from "./VideoCard";
 
@@ -72,7 +73,7 @@ export function VideoPage(p: {
   clips: Clip[];
   renders: Render[];
   say: (m: string) => void;
-  onReshoot: (o: { angle: ReshootAngle; direction?: string; model: string; quality: Quality; trim?: Trim }) => Promise<void>;
+  onReshoot: (o: { angle: ReshootAngle; view?: ReshootView; direction?: string; model: string; quality: Quality; trim?: Trim }) => Promise<void>;
 }) {
   const [takes, setTakes] = useState<T2vTake[]>([]);
   const [side, setSide] = useState<"history" | "how">("history");
@@ -451,10 +452,22 @@ function ExtendForm(p: { clip: Clip | null; take: T2vTake | null; onClearTake: (
 
 /* ---------------------------------------------------------------- Re-shoot */
 
-function ReshootForm(p: { clip: Clip | null; trim: Trim; models: ModelOption[]; onPickVideo: () => void; onStart: (o: { angle: ReshootAngle; direction?: string; model: string; quality: Quality; trim?: Trim }) => Promise<void> }) {
+function ReshootForm(p: { clip: Clip | null; trim: Trim; models: ModelOption[]; onPickVideo: () => void; onStart: (o: { angle: ReshootAngle; view?: ReshootView; direction?: string; model: string; quality: Quality; trim?: Trim }) => Promise<void> }) {
   // models that take the whole take as a reference: Seedance, Wan 3.0 and MiniMax H3
   const options = p.models.filter((m) => m.available && (/seedance/.test(m.id) || m.id.startsWith("refv:")));
-  const [angle, setAngle] = useState<ReshootAngle>("orbit_left");
+  // a preset button, or null once the camera has been dragged to a free position
+  const [preset, setPreset] = useState<ReshootAngle | null>("orbit_left");
+  const [view, setView] = useState<ReshootView>(ANGLE_VIEW.orbit_left);
+  const angle = preset ?? nearestAngle(view);
+  const chooseView = (v: ReshootView) => {
+    setView(v);
+    setPreset(null);
+  };
+  const choosePreset = (id: ReshootAngle) => {
+    setPreset(id);
+    setView(ANGLE_VIEW[id]);
+  };
+  const angleName = preset ? RESHOOT_ANGLES[preset].label : "Custom angle";
   const [direction, setDirection] = useState("");
   const [modelId, setModelId] = useState("");
   const model = options.find((m) => m.id === modelId) ?? options.find((m) => /2-0-260128/.test(m.id)) ?? options[0];
@@ -470,7 +483,7 @@ function ReshootForm(p: { clip: Clip | null; trim: Trim; models: ModelOption[]; 
     if (!p.clip || !model || busy) return;
     setBusy(true);
     try {
-      await p.onStart({ angle, direction: direction.trim() || undefined, model: model.id, quality: q, trim: requestTrim });
+      await p.onStart({ angle, view: preset ? undefined : view, direction: direction.trim() || undefined, model: model.id, quality: q, trim: requestTrim });
     } finally {
       setBusy(false);
     }
@@ -488,9 +501,10 @@ function ReshootForm(p: { clip: Clip | null; trim: Trim; models: ModelOption[]; 
         ) : (
           <button className="vp-add-video" onClick={p.onPickVideo}><Icon d="M4 6h11v12H4zM15 10l5-3v10l-5-3" /><b>Add a video</b><small>Up to {maxSeconds} s</small></button>
         )}
-        <div className="vp-angles" role="radiogroup" aria-label="Camera angle">
+        <Angle3D view={view} onChange={chooseView} videoUrl={p.clip ? `${p.clip.url}#t=${trim.start.toFixed(2)}` : undefined} disabled={!p.clip} />
+        <div className="vp-angles" role="radiogroup" aria-label="Camera angle presets">
           {(Object.keys(RESHOOT_ANGLES) as ReshootAngle[]).map((id) => (
-            <button key={id} role="radio" aria-checked={angle === id} className={angle === id ? "on" : ""} onClick={() => setAngle(id)} title={RESHOOT_ANGLES[id].camera}>
+            <button key={id} role="radio" aria-checked={preset === id} className={preset === id ? "on" : ""} onClick={() => choosePreset(id)} title={RESHOOT_ANGLES[id].camera}>
               <Icon d={ANGLE_ICON[id]} />
               <b>{RESHOOT_ANGLES[id].label}</b>
             </button>
@@ -511,7 +525,7 @@ function ReshootForm(p: { clip: Clip | null; trim: Trim; models: ModelOption[]; 
         <OpenInComfy settings={() => ({ tool: "reshoot", model: model?.id, prompt: direction, quality: q, seconds, angle, aspect: p.clip && p.clip.width < p.clip.height ? "9:16" : "16:9" })} />
       </div>
       <div className="vp-foot">
-        <button className="vp-go" disabled={!p.clip || !model || busy} onClick={go}>{busy ? "Starting…" : `Re-shoot · ${RESHOOT_ANGLES[angle].label}${usd(cost)}`}</button>
+        <button className="vp-go" disabled={!p.clip || !model || busy} onClick={go}>{busy ? "Starting…" : `Re-shoot · ${angleName}${usd(cost)}`}</button>
       </div>
     </>
   );

@@ -1,4 +1,4 @@
-import { RESHOOT_ANGLES, type ReshootAngle } from "./shared.js";
+import { reshootCamera, type ReshootAngle, type ReshootView } from "./shared.js";
 // Builds a Seedance 2.5 video-to-video prompt pack for Recast:
 // @video1 = the take's depth map (motion, camera and layout only),
 // @image1..N = the user's references. Structure follows the proven house
@@ -139,6 +139,8 @@ export function buildPromptPack(o: {
   restyle?: boolean;
   /** Re-shoot: the same moment filmed again from this viewpoint. Needs sourceVideo. */
   reshoot?: ReshootAngle;
+  /** A free viewpoint from the 3D angle picker; its words replace the preset's. */
+  reshootView?: ReshootView;
   /** Visual style for every surface, character and the set (replaces the photoreal default). */
   style?: string;
 }): PromptPack {
@@ -270,8 +272,7 @@ export function buildPromptPack(o: {
 
 /** Re-shoot: the same people, place and action as @video1, filmed again from a new
  *  camera position. The original camera path is not copied: that is what changes. */
-function buildReshootPack(o: { originalUrl: string; scene?: string; motion: MotionReport; look?: string; reshoot: ReshootAngle; sheet?: { tag: string; url: string } }): PromptPack {
-  const angle = RESHOOT_ANGLES[o.reshoot];
+function buildReshootPack(o: { originalUrl: string; scene?: string; motion: MotionReport; look?: string; reshoot: ReshootAngle; reshootView?: ReshootView; sheet?: { tag: string; url: string } }): PromptPack {
   const userText = o.scene?.trim().replace(/\s+/g, " ").replace(/([^.!?])$/, "$1.");
   // only the subject's action carries over: the original camera moves are exactly what a re-shoot replaces
   const timeline = buildTimeline(o.motion, "the main subject")
@@ -282,7 +283,7 @@ function buildReshootPack(o: { originalUrl: string; scene?: string; motion: Moti
     })
     .filter(Boolean);
   const prompt = [
-    `Re-shoot of @video1 from a new camera angle: ${angle.camera}.`,
+    `Re-shoot of @video1 from a new camera angle: ${reshootCamera(o.reshoot, o.reshootView)}.`,
     `It is the same moment as @video1: the same people with the same faces, hair and clothes, the same place, the same lighting and time of day, and the same action happening at the same pace and in the same order. Only the camera position changes.`,
     `Show the setting as it really looks from the new viewpoint, keeping it consistent with what @video1 shows; parts the original camera never saw continue the same place naturally.`,
     o.sheet ? `Anyone matching ${o.sheet.tag} keeps that exact look.` : "",

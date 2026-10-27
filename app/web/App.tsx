@@ -443,7 +443,7 @@ export function App() {
 
   /** Re-shoot tab: the take filmed again from another angle (original video in, no depth). */
   const startReshoot = useCallback(
-    async (o: { angle: NonNullable<RenderParams["reshoot"]>; direction?: string; model: string; quality: Quality; trim?: Trim }) => {
+    async (o: { angle: NonNullable<RenderParams["reshoot"]>; view?: RenderParams["reshootView"]; direction?: string; model: string; quality: Quality; trim?: Trim }) => {
       if (!clip) return;
       const params: RenderParams = {
         clipId: clip.id,
@@ -466,6 +466,7 @@ export function App() {
         keepBackground: true,
         useDepth: false,
         reshoot: o.angle,
+        reshootView: o.view,
         seed: Math.floor(Math.random() * 2 ** 31),
       };
       try {

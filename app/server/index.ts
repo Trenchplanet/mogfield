@@ -33,7 +33,7 @@ import { previewEngine } from "./engines/preview.js";
 import type { Engine } from "./engines/types.js";
 import { exec, ffmpegWithProgress, normalise, poster, probe, restoreSourceAudio, trimVideo } from "./media.js";
 import { AB_LAYOUT, FRAME_MODELS, snapSeconds, RESHOOT_ANGLES, T2V_ASPECTS, type T2vAspect,
-  ASPECTS, CAMERA_PRESETS, H3_LORAS, LENSES, linkSource, type CastCard, type Clip, type DepthJob, type Preparation, type Render, type RenderEvent, type RenderParams,
+  ASPECTS, CAMERA_PRESETS, H3_LORAS, LENSES, linkSource, type CastCard, type Clip, type DepthJob, type Preparation, type Render, type RenderEvent, type RenderParams, type ReshootView,
 } from "./shared.js";
 
 const engine: Engine = ENGINE === "comfy" ? comfyEngine : previewEngine;
@@ -755,6 +755,14 @@ function validate(b: Partial<RenderParams>): RenderParams | string {
     restyle: b.restyle === true && b.useDepth === false ? true : undefined,
     sendAudio: b.sendAudio === false ? false : undefined,
     reshoot: typeof b.reshoot === "string" && b.reshoot in RESHOOT_ANGLES ? b.reshoot : undefined,
+    reshootView:
+      typeof b.reshoot === "string" && b.reshoot in RESHOOT_ANGLES && b.reshootView && typeof b.reshootView === "object"
+        ? {
+            azimuth: Math.round(num((b.reshootView as ReshootView).azimuth, -180, 180, 0)),
+            elevation: Math.round(num((b.reshootView as ReshootView).elevation, -30, 90, 0)),
+            distance: Math.round(num((b.reshootView as ReshootView).distance, 0, 1, 0.5) * 100) / 100,
+          }
+        : undefined,
     style: typeof b.style === "string" && b.style.trim() ? b.style.trim().slice(0, 600) : undefined,
     seed: Math.floor(num(b.seed, 0, 2 ** 31 - 1, Math.random() * 2 ** 31)),
   };
@@ -827,6 +835,7 @@ app.post("/api/renders", async (c) => {
             restyle: params.restyle,
             sendAudio: params.sendAudio,
             reshoot: params.reshoot,
+            reshootView: params.reshootView,
             style: params.style,
             outPath: out,
           },

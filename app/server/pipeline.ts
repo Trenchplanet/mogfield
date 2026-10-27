@@ -1,4 +1,4 @@
-import { RESHOOT_ANGLES, type ReshootAngle } from "./shared.js";
+import { reshootCamera, type ReshootAngle, type ReshootView } from "./shared.js";
 // Mogfield's automatic Recast: video + characters in, video out. No prompt
 // from the user — every step below is our logic.
 //
@@ -65,6 +65,8 @@ export interface PipelineInput {
   restyle?: boolean;
   /** Re-shoot from another camera angle (RESHOOT_ANGLES key). */
   reshoot?: ReshootAngle;
+  /** Re-shoot from a free viewpoint (the 3D angle picker); overrides the preset's camera words. */
+  reshootView?: ReshootView;
   /** Visual style for the whole shot. */
   style?: string;
   outPath: string;
@@ -137,6 +139,7 @@ export async function runRecast(i: PipelineInput, hooks: PipelineHooks) {
     sourceVideo: noDepth,
     restyle,
     reshoot: noDepth ? i.reshoot : undefined,
+    reshootView: noDepth ? i.reshootView : undefined,
     style: i.style,
     originalUrl: i.clipUrl,
     references: [],
@@ -252,14 +255,14 @@ async function runH3Swap(i: PipelineInput, target: NonNullable<ReturnType<typeof
 
 /** The take itself as @Video1 for Wan 3.0 / MiniMax H3 reference to video:
  *  a character swap, a restyle (in words, or after @Image1) or a re-shoot. */
-export function buildRefVideoPrompt(o: { characters: number; restyle?: boolean; reshoot?: ReshootAngle; style?: string; setting?: string; direction?: string; keepScene?: boolean }): string {
+export function buildRefVideoPrompt(o: { characters: number; restyle?: boolean; reshoot?: ReshootAngle; reshootView?: ReshootView; style?: string; setting?: string; direction?: string; keepScene?: boolean }): string {
   const extra = [o.style && `Visual style: ${o.style}`, o.setting && `Setting: ${o.setting}`, o.direction && `Direction: ${o.direction}`]
     .filter(Boolean)
     .map((x) => String(x).trim().replace(/([^.!?])$/, "$1."))
     .join(" ");
   const keep = "Keep the exact motion, timing, action and performance of @Video1 in one continuous take.";
   if (o.reshoot)
-    return `The same moment as @Video1, filmed again from a new camera position: ${RESHOOT_ANGLES[o.reshoot].camera}. Same people with the same faces, hair and clothes, same place, same lighting. ${keep} ${extra}`.trim();
+    return `The same moment as @Video1, filmed again from a new camera position: ${reshootCamera(o.reshoot, o.reshootView)}. Same people with the same faces, hair and clothes, same place, same lighting. ${keep} ${extra}`.trim();
   if (o.restyle) return `Restyle @Video1 in the look of @Image1: its people, world, colours and visual style. ${keep} Same framing and camera movement. ${extra}`.trim();
   if (!o.characters) return `Restyle @Video1 completely: new look for the people, the place and the picture. ${keep} Same framing and camera movement. ${extra}`.trim();
   // tested on Wan 3.0: without this the background of the picture slowly takes over the scene
@@ -283,6 +286,7 @@ async function runRefVideo(i: PipelineInput, target: NonNullable<ReturnType<type
     characters: Math.min(4, i.characters.length),
     restyle: i.restyle,
     reshoot: i.reshoot,
+    reshootView: i.reshootView,
     style: i.style,
     setting: i.keepBackground ? undefined : i.background,
     keepScene: i.keepBackground,
