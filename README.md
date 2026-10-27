@@ -35,6 +35,39 @@ settings to the workflow, submits it, and streams progress back.
 
 <p align="center"><sub>Generated with MOGFIELD. <a href="docs/media/demo.mp4">Watch the MP4</a>.</sub></p>
 
+## Paste a link, get the video
+
+No video file? **Paste a TikTok, Instagram or X link.** MOGFIELD downloads the
+video for you and opens it with trim controls, so you pick the part you want
+(up to 15 s) and carry on. No separate downloader, no file juggling.
+
+1. **Paste the link.** Open *Library → Uploads & characters → Paste link*, or use
+   *Paste link* on Character Swap when no video is loaded. Drop in the link and
+   press **Add**.
+
+   <img src="docs/media/paste-link.png" alt="Pasting a TikTok link in the Library" width="720">
+
+2. **Trim it.** The clip is downloaded and opens with a trim bar. Drag the
+   yellow handles to choose the moment you want.
+
+   <img src="docs/media/paste-trim.png" alt="The downloaded TikTok with trim controls" width="720">
+
+3. **Add a character, pick a model, press Generate.** The cost shows on the
+   button before you spend anything.
+
+   <img src="docs/media/paste-model.png" alt="Character added, Wan 3.0 at 480p picked, cost on the Generate button" width="720">
+
+<p align="center">
+  <img src="docs/media/swap-result.gif" alt="A pasted TikTok motion with a new character, made with Wan 3.0 at 480p" width="240">
+  <img src="docs/media/knight.gif" alt="A knight climbing the Eiffel Tower, made with MiniMax H3" width="320">
+</p>
+
+<p align="center"><sub>Left: a pasted take with a swapped character (Wan 3.0, 480p). Right: a text-to-video clip (MiniMax H3, 4:3). <a href="docs/media/knight.mp4">Watch the MP4</a>.</sub></p>
+
+Links are downloaded with [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (`brew install yt-dlp`).
+Instagram usually needs a logged-in session: see `BACKLOT_YTDLP_COOKIES_FROM_BROWSER`
+in [`app/.env.example`](app/.env.example). Only use videos you have the right to use.
+
 ## Quick start
 
 ```bash
@@ -127,9 +160,10 @@ key frames with your cast, and renders the shots after you approve each stage.
 
 - Node.js 22 or newer
 - ffmpeg and ffprobe on `PATH`
+- `yt-dlp` to paste TikTok, Instagram or X links
 - Optional: Python 3 with `opencv-python` and `numpy` (preparation helper),
   [Rubber Band](https://breakfastquay.com/rubberband/) (`brew install rubberband`)
-  for the vocal pitch shift, and `yt-dlp` for pasted links
+  for the vocal pitch shift
 - For API mode: a Comfy account and API key
 - For LOCAL mode: a ComfyUI install with the custom nodes listed below
 

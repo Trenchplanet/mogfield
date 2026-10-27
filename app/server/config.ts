@@ -49,7 +49,7 @@ export const PORT = Number(process.env.BACKLOT_PORT ?? (process.env.NODE_ENV ===
 /** Max renders per visitor IP per day; 0 disables the cap. */
 export const RENDER_CAP = Number(process.env.BACKLOT_RENDER_CAP ?? 0);
 export const MAX_UPLOAD_MB = Number(process.env.BACKLOT_MAX_UPLOAD_MB ?? 200);
-export const REPO_URL = process.env.BACKLOT_REPO_URL ?? "github.com/OWNER/mogfield";
+export const REPO_URL = process.env.BACKLOT_REPO_URL ?? "github.com/Trenchplanet/mogfield";
 /** yt-dlp fetches TikTok / Instagram / X links. Instagram usually needs cookies from a logged-in browser. */
 export const YTDLP = process.env.BACKLOT_YTDLP ?? "yt-dlp";
 export const YTDLP_COOKIES_FROM_BROWSER = process.env.BACKLOT_YTDLP_COOKIES_FROM_BROWSER ?? "";

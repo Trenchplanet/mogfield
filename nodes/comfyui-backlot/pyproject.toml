@@ -6,7 +6,7 @@ license = { file = "LICENSE" }
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/OWNER/backlot"
+Repository = "https://github.com/Trenchplanet/mogfield"
 
 [tool.comfy]
 PublisherId = "backlot"

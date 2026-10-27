@@ -1206,7 +1206,7 @@ export function App() {
       </div>
       </div>
 
-      {sharing && <ShareSheet render={sharing} repo={health?.repo ?? "github.com/OWNER/mogfield"} onClose={() => setSharing(null)} />}
+      {sharing && <ShareSheet render={sharing} repo={health?.repo ?? "github.com/Trenchplanet/mogfield"} onClose={() => setSharing(null)} />}
       {backendOpen && (
         <BackendSheet
           initial={backendOpen}
