@@ -25,6 +25,7 @@ sysctl -w vm.swappiness=60 >/dev/null
 
 echo "==> Packages"
 export DEBIAN_FRONTEND=noninteractive
+rm -f /etc/apt/sources.list.d/caddy.list /usr/share/keyrings/caddy.gpg # left by an earlier version of this script
 apt-get update -qq
 apt-get install -y -qq curl git ca-certificates ffmpeg ufw debian-keyring debian-archive-keyring apt-transport-https gnupg >/dev/null
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 22 ]; then
