@@ -128,7 +128,7 @@ export function Library(p: {
               ))}
             </div>
           ) : (
-            <span className="lib-hint">{tab === "characters" ? "Saved characters. Drag one onto Add your characters, or paste an image (⌘V)." : "Your finished videos."}</span>
+            <span className="lib-hint">{tab === "characters" ? <><span className="hint-desk">Saved characters. Drag one onto Add your characters, or paste an image (⌘V).</span><span className="hint-touch">Saved characters. Tap one to add it.</span></> : "Your finished videos."}</span>
           )}
           <button className="ghost lib-sort" onClick={() => setSort(sort === "new" ? "old" : "new")}>
             {sort === "new" ? "Newest first" : "Oldest first"}

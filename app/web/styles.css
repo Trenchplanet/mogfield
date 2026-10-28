@@ -559,7 +559,12 @@ button.chip:hover:not(:disabled) { background: rgba(0,0,0,0.6); }
 
 @media (max-width: 1180px) { .library { left: 364px; } }
 @media (max-width: 820px) {
-  .library { inset: 0; border-radius: 0; }
+  /* the sheet covers the whole screen, header included, and clears the notch */
+  .library { inset: 0; z-index: 80; border-radius: 0; padding-top: env(safe-area-inset-top); }
+  .lib-head { padding-right: 56px; position: relative; }
+  .lib-head .lib-close { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 10px; }
+  .lib-bar { flex-wrap: wrap; }
+  .lib-hint { font-size: 13px; line-height: 1.35; }
   .lib-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .lib-actions { opacity: 1; }
 }
@@ -1365,3 +1370,7 @@ button.lp-tile:hover:not(:disabled) { background: var(--card); }
 .a3d-lens { fill: #fff; }
 .a3d-dist { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; font-size: 11px; color: var(--text-2); }
 .a3d-dist input { width: 100%; }
+
+/* library hint: drag wording on desktop, tap wording on touch screens */
+.hint-touch { display: none; }
+@media (max-width: 820px) { .hint-desk { display: none; } .hint-touch { display: inline; } }
