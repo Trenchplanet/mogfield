@@ -16,7 +16,7 @@ import { prepareGenjustsu, preparationUrls, readWavSamples, sameSamples, sourceA
 import { adoptLegacyPreparations, loadPreparations, persistPreparation, type SourceCandidate } from "./preparationStore.js";
 import { exportWorkflow, type ExportRequest } from "./workflowExport.js";
 import { agentRoutes } from "./agent.js";
-import { OwnedMap, onPurged, ownerOf, PER_VISITOR, runAs, sweepExpired } from "./scope.js";
+import { currentVisitor, OwnedMap, onPurged, ownerOf, PER_VISITOR, runAs, sweepExpired } from "./scope.js";
 import { failRunning, finishAll, H3_STEPS, makeSteps, PREPARATION_STEPS, REFV_STEPS, SEEDANCE_STEPS, setStep } from "./steps.js";
 import { describeStyle, editCharacterPhoto, fluxCard, geminiImage, makeCharacterSheet, nearestRatio, SHEET_MODEL, type SheetSize } from "./characters.js";
 import { catalogModel, catalogModels, runCatalogModel } from "./providers/catalog.js";
@@ -724,6 +724,9 @@ async function pump() {
 
 const capCounts = new Map<string, number>();
 function capKey(c: Context) {
+  // a public demo counts per device (the visitor cookie); otherwise per address
+  const device = currentVisitor();
+  if (device) return `${new Date().toISOString().slice(0, 10)}:${device}`;
   // the LAST hop is the one our proxy (ngrok) added; earlier ones are client-supplied
   const ip = c.req.header("x-forwarded-for")?.split(",").at(-1)?.trim() || c.req.header("x-real-ip") || "local";
   return `${new Date().toISOString().slice(0, 10)}:${ip}`;
