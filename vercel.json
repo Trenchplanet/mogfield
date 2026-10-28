@@ -3,5 +3,10 @@
   "installCommand": "npm --prefix app install",
   "buildCommand": "npm --prefix app run build",
   "outputDirectory": "app/dist",
-  "rewrites": [{ "source": "/((?!assets/|examples/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "http://172.86.112.62/api/:path*" },
+    { "source": "/media/:path*", "destination": "http://172.86.112.62/media/:path*" },
+    { "source": "/examples/:path*", "destination": "http://172.86.112.62/examples/:path*" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ]
 }
