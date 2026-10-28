@@ -50,7 +50,7 @@ video for you and opens it with trim controls, so you pick the part you want
 2. **Trim it.** The clip is downloaded and opens with a trim bar. Drag the
    yellow handles to choose the moment you want.
 
-   <img src="docs/media/paste-trim.png" alt="The downloaded TikTok with trim controls" width="720">
+   <img src="docs/media/paste-trim.png" alt="A downloaded video with the trim controls" width="720">
 
 3. **Add a character, pick a model, press Generate.** The cost shows on the
    button before you spend anything.
