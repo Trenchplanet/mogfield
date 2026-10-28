@@ -11,11 +11,12 @@ import { DATA_DIR, RENDER_DIR } from "./config.js";
 import { runFrames } from "./frames.js";
 import { frameAt, joinContinuation } from "./media.js";
 import { generateFromPrompt } from "./providers/comfyRouter.js";
+import { OwnedMap, onPurged } from "./scope.js";
 import { runCatalogModel } from "./providers/catalog.js";
 import { FRAME_MODELS, T2V_ASPECTS, type FrameModel, type T2vAspect, type T2vTake } from "./shared.js";
 
 const FILE = join(DATA_DIR, "t2v.json");
-const takes = new Map<string, T2vTake>();
+const takes = new OwnedMap<T2vTake>();
 
 function load() {
   if (!existsSync(FILE)) return;
@@ -31,7 +32,8 @@ function load() {
 }
 load();
 
-const save = () => writeFile(FILE, JSON.stringify([...takes.values()], null, 2)).catch(() => {});
+const save = () => writeFile(FILE, JSON.stringify(takes.all(), null, 2)).catch(() => {});
+onPurged(() => void save());
 
 export function listTakes(): T2vTake[] {
   return [...takes.values()].sort((a, b) => b.createdAt - a.createdAt);

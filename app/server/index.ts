@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -6,6 +6,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
+import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import {
   APP_DIR, DATA_DIR, ENGINE, EXAMPLES_DIR, GENJUTSU_DIR, TRIM_DIR, LUT_DIR, MAX_UPLOAD_MB, PORT, REEL_DIR, RENDER_CAP, RENDER_DIR, REPO_URL, UPLOAD_DIR, WORKFLOW_DIR,
@@ -15,6 +16,7 @@ import { prepareGenjustsu, preparationUrls, readWavSamples, sameSamples, sourceA
 import { adoptLegacyPreparations, loadPreparations, persistPreparation, type SourceCandidate } from "./preparationStore.js";
 import { exportWorkflow, type ExportRequest } from "./workflowExport.js";
 import { agentRoutes } from "./agent.js";
+import { OwnedMap, onPurged, ownerOf, PER_VISITOR, runAs, sweepExpired } from "./scope.js";
 import { failRunning, finishAll, H3_STEPS, makeSteps, PREPARATION_STEPS, REFV_STEPS, SEEDANCE_STEPS, setStep } from "./steps.js";
 import { describeStyle, editCharacterPhoto, fluxCard, geminiImage, makeCharacterSheet, nearestRatio, SHEET_MODEL, type SheetSize } from "./characters.js";
 import { catalogModel, catalogModels, runCatalogModel } from "./providers/catalog.js";
@@ -39,6 +41,27 @@ import { AB_LAYOUT, FRAME_MODELS, snapSeconds, RESHOOT_ANGLES, T2V_ASPECTS, type
 const engine: Engine = ENGINE === "comfy" ? comfyEngine : previewEngine;
 const app = new Hono();
 
+// Public demo: each visitor only ever sees their own uploads, takes and projects (see scope.ts).
+if (PER_VISITOR) {
+  app.use("*", async (c, next) => {
+    let vid = getCookie(c, "mf_vid");
+    if (!vid || !/^[0-9a-f]{24}$/.test(vid)) {
+      vid = randomBytes(12).toString("hex");
+      setCookie(c, "mf_vid", vid, { path: "/", httpOnly: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 30 });
+    }
+    // another visitor's file or record does not exist as far as this visitor can tell
+    for (const token of c.req.path.match(/(?<![0-9a-f])[0-9a-f]{8}(?![0-9a-f])/g) ?? []) {
+      const owner = ownerOf(token);
+      if (owner && owner !== vid) return c.json({ error: "not found" }, 404);
+    }
+    // pointing the shared server at another ComfyUI is the owner's call, not a visitor's
+    if (c.req.path === "/api/backend" && c.req.method !== "GET") return c.json({ error: "not available on the public demo" }, 403);
+    await runAs(vid, next);
+    if (c.req.path.startsWith("/api/")) c.res.headers.set("Cache-Control", "private, no-store");
+    else if (c.req.path.startsWith("/media/")) c.res.headers.set("Cache-Control", "private, max-age=3600");
+  });
+}
+
 /** A failed call to Comfy / yt-dlp. Not 502: Cloudflare replaces 502 responses with its own
  *  page, so the visitor would only see "HTTP 502" instead of the reason. */
 function upstreamError(c: Context, e: unknown) {
@@ -49,7 +72,7 @@ function upstreamError(c: Context, e: unknown) {
 
 // ---------------------------------------------------------------- clips
 
-const clips = new Map<string, Clip & { path: string }>();
+const clips = new OwnedMap<Clip & { path: string }>();
 
 // ---------------------------------------------------------------- library index
 // data/library.json keeps what the files alone cannot: video names, image
@@ -69,9 +92,9 @@ let saveTimer: NodeJS.Timeout | null = null;
 function saveLibrary() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    library.images = [...casts.values()];
+    library.images = casts.all();
     // every take, so the queue still shows failed and interrupted ones after a restart
-    library.renders = [...renders.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, 200);
+    library.renders = renders.all().sort((a, b) => b.createdAt - a.createdAt).slice(0, 200);
     void writeFile(LIBRARY_FILE, JSON.stringify(library, null, 2)).catch((e) => console.error("library save failed:", e));
   }, 200);
 }
@@ -190,7 +213,7 @@ app.post("/api/clips/link", async (c) => {
 
 // ---------------------------------------------------------------- depth maps
 
-const depthJobs = new Map<string, DepthJob>();
+const depthJobs = new OwnedMap<DepthJob>();
 const depthBus = new EventEmitter();
 depthBus.setMaxListeners(0);
 
@@ -260,7 +283,7 @@ interface PreparationState extends Preparation {
   sourcePath: string;
   result?: PreparationResult;
 }
-const preparations = new Map<string, PreparationState>();
+const preparations = new OwnedMap<PreparationState>();
 const preparationBus = new EventEmitter();
 preparationBus.setMaxListeners(0);
 const publicPreparation = (state: PreparationState): Preparation => {
@@ -469,7 +492,7 @@ app.use("/media/genjustsu/*", async (c) => c.notFound());
 
 // ---------------------------------------------------------------- cast cards
 
-const casts = new Map<string, CastCard & { path: string }>();
+const casts = new OwnedMap<CastCard & { path: string }>();
 
 app.post("/api/cast", async (c) => {
   const body = await c.req.parseBody();
@@ -681,7 +704,7 @@ app.post("/api/recast/pack", async (c) => {
 
 // ---------------------------------------------------------------- renders
 
-const renders = new Map<string, Render>();
+const renders = new OwnedMap<Render>();
 const bus = new EventEmitter();
 bus.setMaxListeners(0);
 let takeCounter = 0;
@@ -1290,6 +1313,12 @@ await loadSamples();
 await loadUploads();
 await adoptOlderPreparations();
 void listModels().catch(() => {}); // warm the model catalog before the first visitor
+if (PER_VISITOR) {
+  onPurged(saveLibrary);
+  const sweep = () => void sweepExpired([UPLOAD_DIR, RENDER_DIR, REEL_DIR, TRIM_DIR, join(DATA_DIR, "depth"), GENJUTSU_DIR]).then((n) => n && console.log(`removed ${n} expired visitor item(s)`));
+  setInterval(sweep, 30 * 60_000).unref();
+  sweep();
+}
 
 serve({ fetch: app.fetch, port: PORT, hostname: process.env.BACKLOT_HOST }, () => {
   console.log(`MOGFIELD server on http://localhost:${PORT}  engine=${ENGINE}${ENGINE === "comfy" ? `  target=${process.env.COMFY_BASE_URL ?? "Comfy Cloud"}` : ""}`);

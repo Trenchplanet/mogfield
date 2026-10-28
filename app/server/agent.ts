@@ -8,6 +8,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { OwnedMap, onPurged } from "./scope.js";
 import { writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { Hono } from "hono";
@@ -27,7 +28,7 @@ const MAX_SHOTS = 12;
 
 type CastLookup = (id: string) => { path: string; prompt: string } | undefined;
 
-const projects = new Map<string, AgentProject>();
+const projects = new OwnedMap<AgentProject>();
 (() => {
   if (!existsSync(FILE)) return;
   try {
@@ -43,7 +44,8 @@ const projects = new Map<string, AgentProject>();
     /* unreadable: start empty */
   }
 })();
-const save = () => writeFile(FILE, JSON.stringify([...projects.values()], null, 2)).catch(() => {});
+const save = () => writeFile(FILE, JSON.stringify(projects.all(), null, 2)).catch(() => {});
+onPurged(() => void save());
 const touch = (p: AgentProject) => {
   p.updatedAt = Date.now();
   void save();

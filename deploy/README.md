@@ -37,3 +37,13 @@ export COMFY_API_KEY="comfyui-..."
 export BACKLOT_RENDER_CAP=5        # renders per visitor per day
 npm run build && npm start
 ```
+
+## Public demo: one library per visitor
+
+If strangers can open your server, set `BACKLOT_PER_VISITOR=1`. Each browser then
+gets a private id in a cookie, and everything it creates (uploads, characters,
+takes, Agent projects) is visible only to that browser. Other visitors get a
+404 for its files. Data is deleted after `BACKLOT_VISITOR_TTL_HOURS` (24 by
+default). Pointing the server at another ComfyUI (`POST /api/backend`) is
+disabled in this mode. The bundled sample clips stay shared. Leave the flag off
+for your own machine: one person, one library.
