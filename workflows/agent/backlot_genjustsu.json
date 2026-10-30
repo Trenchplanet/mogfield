@@ -1,0 +1,123 @@
+{
+  "1": {
+    "class_type": "LoadVideo",
+    "inputs": {
+      "file": "take.mp4"
+    },
+    "_meta": {
+      "title": "BL:video"
+    }
+  },
+  "2": {
+    "class_type": "GetVideoComponents",
+    "inputs": {
+      "video": [
+        "1",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Video components"
+    }
+  },
+  "3": {
+    "class_type": "DepthAnythingV2Preprocessor",
+    "inputs": {
+      "image": [
+        "2",
+        0
+      ],
+      "ckpt_name": "depth_anything_v2_vitl.pth",
+      "resolution": 512
+    },
+    "_meta": {
+      "title": "Depth Anything V2"
+    }
+  },
+  "4": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "6",
+        0
+      ],
+      "fps": [
+        "2",
+        2
+      ],
+      "codec": "h264"
+    },
+    "_meta": {
+      "title": "Assemble depth"
+    }
+  },
+  "5": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "4",
+        0
+      ],
+      "filename_prefix": "backlot/genjustsu-depth",
+      "format": "mp4",
+      "format.codec": "h264",
+      "codec": "h264"
+    },
+    "_meta": {
+      "title": "BL:depth-output"
+    }
+  },
+  "6": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "3",
+        0
+      ],
+      "upscale_method": "bilinear",
+      "width": 512,
+      "height": 512,
+      "crop": "disabled"
+    },
+    "_meta": {
+      "title": "BL:depth-size"
+    }
+  },
+  "13": {
+    "class_type": "LoadAudio",
+    "inputs": {
+      "audio": "source.wav"
+    },
+    "_meta": {
+      "title": "BL:audio"
+    }
+  },
+  "14": {
+    "class_type": "AudioSeparation",
+    "inputs": {
+      "audio": [
+        "13",
+        0
+      ],
+      "chunk_fade_shape": "linear",
+      "chunk_length": 10,
+      "chunk_overlap": 0.1
+    },
+    "_meta": {
+      "title": "Separate audio"
+    }
+  },
+  "15": {
+    "class_type": "SaveAudio",
+    "inputs": {
+      "audio": [
+        "14",
+        3
+      ],
+      "filename_prefix": "backlot/genjustsu-vocals"
+    },
+    "_meta": {
+      "title": "BL:vocals-output"
+    }
+  }
+}

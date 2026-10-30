@@ -3,7 +3,10 @@
 Root-level JSON files are API-format ComfyUI graphs the Backlot server runs
 through the Comfy SDK. The server finds nodes by **title**, not id, so you can
 re-export a graph from ComfyUI without touching server code. `local/` holds
-ComfyUI editor workflows; the server does not load those graphs.
+ComfyUI editor workflows; the server does not load those graphs. `agent/` holds
+schema-checked rebuilds of every graph here, laid-out editor versions, and
+`agent/editor/backlot_all.json`: all graphs in one workflow driven by the
+**Backlot Menu** node (see [`agent/README.md`](agent/README.md)).
 
 | File | Status | What it does |
 | --- | --- | --- |

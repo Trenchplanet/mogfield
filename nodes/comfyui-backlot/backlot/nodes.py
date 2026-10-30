@@ -223,12 +223,29 @@ class BacklotShotCard:
         return (t.repeat(frames, 1, 1, 1),)
 
 
+class BacklotMenu:
+    """The Backlot menu panel (web/backlot_menu.js). It picks which lane of the combined
+    workflow runs; the frontend never sends it to the server, so it does no work here."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {}}
+
+    RETURN_TYPES = ()
+    FUNCTION = "run"
+    CATEGORY = CATEGORY
+
+    def run(self):
+        return ()
+
+
 NODE_CLASS_MAPPINGS = {
     "BacklotCameraRig": BacklotCameraRig,
     "BacklotLensKit": BacklotLensKit,
     "BacklotGradeLUT": BacklotGradeLUT,
     "BacklotLetterbox": BacklotLetterbox,
     "BacklotShotCard": BacklotShotCard,
+    "BacklotMenu": BacklotMenu,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -237,4 +254,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "BacklotGradeLUT": "Backlot GradeLUT",
     "BacklotLetterbox": "Backlot Letterbox",
     "BacklotShotCard": "Backlot ShotCard",
+    "BacklotMenu": "Backlot Menu",
 }

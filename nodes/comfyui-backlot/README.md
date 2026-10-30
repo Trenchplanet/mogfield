@@ -10,6 +10,7 @@ Real camera paths and real optics for ComfyUI video workflows. Part of
 | **Backlot GradeLUT** | Applies any 3D `.cube` LUT (trilinear). Seven looks ship in `luts/`; drop your own in. |
 | **Backlot Letterbox** | 2.39 / 1.85 / 16:9 / 9:16 mattes. |
 | **Backlot ShotCard** | A slate / title card frame for reels. |
+| **Backlot Menu** | The MOGFIELD easy panel inside ComfyUI (`web/backlot_menu.js`). It has tabs for Video, Image, Character Swap, Camera and Prep, plus tool cards with a ready/missing status. Each tool shows its inputs (upload or drop a take or a character, prompt, seed, camera, lens, look, matte) and a Generate button. It drives `workflows/agent/editor/backlot_all.json`: picking a tool unmutes that lane, mutes the others and moves the view there. Inputs are written to the lane's `BL:` widgets. The node is UI-only and is never sent to the server. |
 
 Depth convention: bright = near (Depth Anything V2, MiDaS). Without a depth
 input the nodes fall back to a soft pseudo-depth.

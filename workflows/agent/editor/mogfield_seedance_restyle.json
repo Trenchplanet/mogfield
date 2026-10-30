@@ -1,0 +1,268 @@
+{
+  "last_node_id": 5,
+  "last_link_id": 3,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadVideo",
+      "pos": [
+        30,
+        280
+      ],
+      "size": [
+        330,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "title": "BL:video-1",
+      "properties": {},
+      "widgets_values": [
+        "take-depth.mp4"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "LoadImage",
+      "pos": [
+        30,
+        458.0
+      ],
+      "size": [
+        330,
+        328.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            2
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "title": "BL:image-1",
+      "properties": {},
+      "widgets_values": [
+        "character.png"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "ByteDance2ReferenceNodeV2",
+      "pos": [
+        490,
+        280
+      ],
+      "size": [
+        420,
+        402.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model.reference_videos.video_1",
+          "type": "VIDEO",
+          "link": 1,
+          "grow_id": 3088894289322207
+        },
+        {
+          "name": "model.reference_images.image_1",
+          "type": "IMAGE",
+          "link": 2,
+          "grow_id": 1586722094611606
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "draft_task_id",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "title": "BL:seedance",
+      "properties": {},
+      "widgets_values": [
+        "Seedance 2.0",
+        "Follow the motion and layout of the reference video (a depth map). The main person is the character in the reference image. Style: ...",
+        "480p",
+        "9:16",
+        10,
+        false,
+        true,
+        false,
+        1,
+        "fixed",
+        false
+      ]
+    },
+    {
+      "id": 4,
+      "type": "SaveVideo",
+      "pos": [
+        1040,
+        280
+      ],
+      "size": [
+        330,
+        166
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": []
+        }
+      ],
+      "title": "BL:output",
+      "properties": {},
+      "widgets_values": [
+        "mogfield/seedance",
+        "auto",
+        "auto",
+        "auto"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "MarkdownNote",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        520,
+        170
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "About this workflow",
+      "properties": {},
+      "widgets_values": [
+        "## Mogfield \u00b7 Seedance restyle\nDepth video + character picture \u2192 Seedance 2.0.\n\n\u26a0 Partner node: running spends Comfy credits."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      3,
+      0,
+      "VIDEO"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      1,
+      "IMAGE"
+    ],
+    [
+      3,
+      3,
+      0,
+      4,
+      0,
+      "VIDEO"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Inputs",
+      "bounding": [
+        0,
+        220,
+        390,
+        626.0
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "Seedance (paid partner node)",
+      "bounding": [
+        460,
+        220,
+        480,
+        522.0
+      ],
+      "color": "#A88",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "Output",
+      "bounding": [
+        1010,
+        220,
+        390,
+        286
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6,
+      "offset": [
+        60,
+        40
+      ]
+    }
+  },
+  "version": 0.4
+}

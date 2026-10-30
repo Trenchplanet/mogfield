@@ -1,0 +1,135 @@
+{
+  "1": {
+    "class_type": "LoadVideo",
+    "inputs": {
+      "file": "depth-color.mp4"
+    },
+    "_meta": {
+      "title": "BL:video"
+    }
+  },
+  "2": {
+    "class_type": "GetVideoComponents",
+    "inputs": {
+      "video": [
+        "1",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Video components"
+    }
+  },
+  "3": {
+    "class_type": "SAM3VideoSegmentation",
+    "inputs": {
+      "video_frames": [
+        "2",
+        0
+      ],
+      "prompt_mode": "text",
+      "text_prompt": "person",
+      "frame_idx": 0,
+      "score_threshold": 0.3
+    },
+    "_meta": {
+      "title": "BL:segment"
+    }
+  },
+  "4": {
+    "class_type": "LoadSAM3Model",
+    "inputs": {
+      "model_path": "models/sam3/sam3.pt"
+    },
+    "_meta": {
+      "title": "Load SAM 3"
+    }
+  },
+  "5": {
+    "class_type": "SAM3Propagate",
+    "inputs": {
+      "sam3_model": [
+        "4",
+        0
+      ],
+      "video_state": [
+        "3",
+        0
+      ],
+      "start_frame": 0,
+      "end_frame": -1,
+      "direction": "both",
+      "offload_model": false
+    },
+    "_meta": {
+      "title": "Track SAM 3 masks"
+    }
+  },
+  "6": {
+    "class_type": "SAM3VideoOutput",
+    "inputs": {
+      "masks": [
+        "5",
+        0
+      ],
+      "video_state": [
+        "5",
+        2
+      ],
+      "scores": [
+        "5",
+        1
+      ],
+      "obj_id": -1,
+      "plot_all_masks": true
+    },
+    "_meta": {
+      "title": "Extract SAM 3 masks"
+    }
+  },
+  "7": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "6",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Masks to images"
+    }
+  },
+  "8": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "7",
+        0
+      ],
+      "fps": [
+        "2",
+        2
+      ],
+      "codec": "h264"
+    },
+    "_meta": {
+      "title": "Assemble masks"
+    }
+  },
+  "9": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "8",
+        0
+      ],
+      "filename_prefix": "backlot/genjustsu-masks",
+      "format": "mp4",
+      "format.codec": "h264",
+      "codec": "h264"
+    },
+    "_meta": {
+      "title": "BL:mask-output"
+    }
+  }
+}

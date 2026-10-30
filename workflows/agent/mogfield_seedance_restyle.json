@@ -1,0 +1,59 @@
+{
+  "1": {
+    "class_type": "LoadVideo",
+    "inputs": {
+      "file": "take-depth.mp4"
+    },
+    "_meta": {
+      "title": "BL:video-1"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "character.png"
+    },
+    "_meta": {
+      "title": "BL:image-1"
+    }
+  },
+  "3": {
+    "class_type": "ByteDance2ReferenceNodeV2",
+    "inputs": {
+      "model": "Seedance 2.0",
+      "model.prompt": "Follow the motion and layout of the reference video (a depth map). The main person is the character in the reference image. Style: ...",
+      "model.resolution": "480p",
+      "model.ratio": "9:16",
+      "model.duration": 10,
+      "model.generate_audio": false,
+      "model.reference_videos.video_1": [
+        "1",
+        0
+      ],
+      "model.reference_images.image_1": [
+        "2",
+        0
+      ],
+      "seed": 1,
+      "watermark": false
+    },
+    "_meta": {
+      "title": "BL:seedance"
+    }
+  },
+  "4": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "3",
+        0
+      ],
+      "filename_prefix": "mogfield/seedance",
+      "format": "auto",
+      "format.codec": "auto"
+    },
+    "_meta": {
+      "title": "BL:output"
+    }
+  }
+}

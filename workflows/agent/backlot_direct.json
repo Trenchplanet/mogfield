@@ -1,0 +1,144 @@
+{
+  "1": {
+    "class_type": "LoadVideo",
+    "inputs": {
+      "file": "take.mp4"
+    },
+    "_meta": {
+      "title": "BL:video"
+    }
+  },
+  "2": {
+    "class_type": "GetVideoComponents",
+    "inputs": {
+      "video": [
+        "1",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Frames"
+    }
+  },
+  "3": {
+    "class_type": "DepthAnythingV2Preprocessor",
+    "inputs": {
+      "image": [
+        "2",
+        0
+      ],
+      "ckpt_name": "depth_anything_v2_vitl.pth",
+      "resolution": 512
+    },
+    "_meta": {
+      "title": "Depth"
+    }
+  },
+  "4": {
+    "class_type": "BacklotCameraRig",
+    "inputs": {
+      "images": [
+        "2",
+        0
+      ],
+      "depth": [
+        "3",
+        0
+      ],
+      "preset": "dolly_in",
+      "strength": 1.0,
+      "pivot": 0.5,
+      "seed": 0
+    },
+    "_meta": {
+      "title": "BL:camera"
+    }
+  },
+  "5": {
+    "class_type": "BacklotLensKit",
+    "inputs": {
+      "images": [
+        "4",
+        0
+      ],
+      "depth": [
+        "4",
+        4
+      ],
+      "lens": "40mm anamorphic",
+      "f_stop": 2.0,
+      "focus": 0.7,
+      "focus_end": -1.0,
+      "halation": 0.35,
+      "grain": 0.035,
+      "vignette": 0.2,
+      "seed": 0
+    },
+    "_meta": {
+      "title": "BL:lens"
+    }
+  },
+  "6": {
+    "class_type": "BacklotGradeLUT",
+    "inputs": {
+      "images": [
+        "5",
+        0
+      ],
+      "lut": "tungsten_night.cube",
+      "strength": 0.85
+    },
+    "_meta": {
+      "title": "BL:grade"
+    }
+  },
+  "7": {
+    "class_type": "BacklotLetterbox",
+    "inputs": {
+      "images": [
+        "6",
+        0
+      ],
+      "aspect": "native"
+    },
+    "_meta": {
+      "title": "BL:letterbox"
+    }
+  },
+  "8": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "7",
+        0
+      ],
+      "fps": [
+        "2",
+        2
+      ],
+      "audio": [
+        "2",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Assemble"
+    }
+  },
+  "9": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "8",
+        0
+      ],
+      "filename_prefix": "backlot/direct",
+      "format": "auto",
+      "format.codec": "auto",
+      "codec": "auto"
+    },
+    "_meta": {
+      "title": "BL:output"
+    }
+  }
+}

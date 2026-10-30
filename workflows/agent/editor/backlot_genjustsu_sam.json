@@ -1,0 +1,566 @@
+{
+  "last_node_id": 10,
+  "last_link_id": 11,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadVideo",
+      "pos": [
+        30,
+        280
+      ],
+      "size": [
+        330,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "title": "BL:video",
+      "properties": {},
+      "widgets_values": [
+        "depth-color.mp4"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "GetVideoComponents",
+      "pos": [
+        30,
+        458.0
+      ],
+      "size": [
+        330,
+        150
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            2
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": []
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": [
+            10
+          ]
+        },
+        {
+          "name": "bit_depth",
+          "type": "COMBO",
+          "links": []
+        },
+        {
+          "name": "color_space",
+          "type": "COMBO",
+          "links": []
+        }
+      ],
+      "title": "Video components",
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 3,
+      "type": "SAM3VideoSegmentation",
+      "pos": [
+        490,
+        452
+      ],
+      "size": [
+        330,
+        216
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video_frames",
+          "type": "IMAGE",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "out0",
+          "type": "*",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "title": "BL:segment",
+      "properties": {
+        "Node name for S&R": "SAM3VideoSegmentation"
+      },
+      "widgets_values": [
+        "text",
+        "person",
+        0,
+        0.3
+      ]
+    },
+    {
+      "id": 4,
+      "type": "LoadSAM3Model",
+      "pos": [
+        490,
+        280
+      ],
+      "size": [
+        330,
+        112
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "out0",
+          "type": "*",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "title": "Load SAM 3",
+      "properties": {
+        "Node name for S&R": "LoadSAM3Model"
+      },
+      "widgets_values": [
+        "models/sam3/sam3.pt"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "SAM3Propagate",
+      "pos": [
+        490,
+        728
+      ],
+      "size": [
+        330,
+        242
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "sam3_model",
+          "type": "*",
+          "link": 3
+        },
+        {
+          "name": "video_state",
+          "type": "*",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "out0",
+          "type": "*",
+          "links": [
+            5
+          ]
+        },
+        {
+          "name": "out1",
+          "type": "*",
+          "links": [
+            7
+          ]
+        },
+        {
+          "name": "out2",
+          "type": "*",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "title": "Track SAM 3 masks",
+      "properties": {
+        "Node name for S&R": "SAM3Propagate"
+      },
+      "widgets_values": [
+        0,
+        -1,
+        "both",
+        false
+      ]
+    },
+    {
+      "id": 6,
+      "type": "SAM3VideoOutput",
+      "pos": [
+        490,
+        1030
+      ],
+      "size": [
+        330,
+        216
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "masks",
+          "type": "*",
+          "link": 5
+        },
+        {
+          "name": "video_state",
+          "type": "*",
+          "link": 6
+        },
+        {
+          "name": "scores",
+          "type": "*",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "out0",
+          "type": "MASK",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "title": "Extract SAM 3 masks",
+      "properties": {
+        "Node name for S&R": "SAM3VideoOutput"
+      },
+      "widgets_values": [
+        -1,
+        true
+      ]
+    },
+    {
+      "id": 7,
+      "type": "MaskToImage",
+      "pos": [
+        860,
+        280
+      ],
+      "size": [
+        330,
+        80
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "title": "Masks to images",
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 8,
+      "type": "CreateVideo",
+      "pos": [
+        1320,
+        280
+      ],
+      "size": [
+        330,
+        188
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 9
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "link": 10,
+          "grow_id": 4384270614968621,
+          "widget": {
+            "name": "fps"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "title": "Assemble masks",
+      "properties": {},
+      "widgets_values": [
+        30.0,
+        "auto",
+        "sRGB",
+        "h264"
+      ]
+    },
+    {
+      "id": 9,
+      "type": "SaveVideo",
+      "pos": [
+        1320,
+        528
+      ],
+      "size": [
+        330,
+        218
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": []
+        }
+      ],
+      "title": "BL:mask-output",
+      "properties": {},
+      "widgets_values": [
+        "backlot/genjustsu-masks",
+        "mp4",
+        "h264",
+        "auto",
+        "h264",
+        "auto"
+      ]
+    },
+    {
+      "id": 10,
+      "type": "MarkdownNote",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        520,
+        170
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "About this workflow",
+      "properties": {},
+      "widgets_values": [
+        "## Backlot \u00b7 Genjustsu SAM 3\nSAM 3 tracks `person` through the coloured depth video and saves a mask video.\n\nThe SAM 3 pack does not install on this Mac, so those nodes stay red here."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "VIDEO"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      0,
+      "IMAGE"
+    ],
+    [
+      3,
+      4,
+      0,
+      5,
+      0,
+      "*"
+    ],
+    [
+      4,
+      3,
+      0,
+      5,
+      1,
+      "*"
+    ],
+    [
+      5,
+      5,
+      0,
+      6,
+      0,
+      "*"
+    ],
+    [
+      6,
+      5,
+      2,
+      6,
+      1,
+      "*"
+    ],
+    [
+      7,
+      5,
+      1,
+      6,
+      2,
+      "*"
+    ],
+    [
+      8,
+      6,
+      0,
+      7,
+      0,
+      "MASK"
+    ],
+    [
+      9,
+      7,
+      0,
+      8,
+      0,
+      "IMAGE"
+    ],
+    [
+      10,
+      2,
+      2,
+      8,
+      2,
+      "FLOAT"
+    ],
+    [
+      11,
+      8,
+      0,
+      9,
+      0,
+      "VIDEO"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Inputs",
+      "bounding": [
+        0,
+        220,
+        390,
+        448.0
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "Segmentation",
+      "bounding": [
+        460,
+        220,
+        760,
+        1086
+      ],
+      "color": "#b58b2a",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "Output",
+      "bounding": [
+        1290,
+        220,
+        390,
+        586
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6,
+      "offset": [
+        60,
+        40
+      ]
+    }
+  },
+  "version": 0.4
+}
