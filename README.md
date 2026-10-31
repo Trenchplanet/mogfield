@@ -144,6 +144,11 @@ and X links become input takes (via `yt-dlp`).
 
 Describe a film in plain words. A director model writes a storyboard, draws
 key frames with your cast, and renders the shots after you approve each stage.
+Each **project** keeps its own workflow (model, quality, shape, sound),
+characters, storyboard and chat, and downloads as one ComfyUI workflow. On API
+the director is Claude through the Comfy API. On LOCAL it is a model on your own
+machine: Gemma 4 12B by default, or another model and quantization picked in the
+**Director** panel. The panel shows the `llama-server` command that starts it.
 
 ### Everywhere
 

@@ -12,6 +12,18 @@ export type AgentView = Omit<AgentProject, "board"> & {
   quote: { frames: number; shots: number };
   director: string;
 };
+/** The local director: model and quantization choices, the start command and what the server has loaded. */
+export type DirectorStatus = {
+  local: boolean;
+  url: string;
+  running: boolean;
+  models: { repo: string; label: string; note: string; quant: string; uncensored?: boolean; quants: { quant: string; gb: number }[] }[];
+  choice: { repo: string; quant: string };
+  command: string;
+  label: string;
+  loaded?: string[];
+  cloud: string;
+};
 const agentPost = (url: string, body: unknown) =>
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => j<AgentView>(r));
 
@@ -139,6 +151,8 @@ export const api = {
   },
   /** Agent mode (experimental): projects with a director, a storyboard and approvals. */
   agentList: () => fetch("/api/agent").then((r) => j<AgentSummary[]>(r)),
+  directorGet: () => fetch("/api/agent/director").then((r) => j<DirectorStatus>(r)),
+  directorSet: (repo: string, quant: string) => agentPost("/api/agent/director", { repo, quant }) as unknown as Promise<{ command: string; label: string }>,
   agentNew: (body: { title?: string; castIds?: string[] } & Partial<AgentSettings> = {}) => agentPost("/api/agent", body),
   agentUpdate: (id: string, patch: { title?: string; castIds?: string[]; settings?: Partial<AgentSettings> }) =>
     fetch(`/api/agent/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<AgentView>(r)),

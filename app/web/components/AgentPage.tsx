@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FRAME_MODELS, T2V_ASPECTS, type AgentSettings, type AgentStage, type CastCard, type FrameModel, type T2vAspect } from "../../server/shared";
-import { api, type AgentShotView, type AgentSummary, type AgentView } from "../api";
+import { api, type AgentShotView, type AgentSummary, type AgentView, type DirectorStatus } from "../api";
 import { saveToPhotos } from "../save";
 
 const STAGES: { id: AgentStage; label: string }[] = [
@@ -214,6 +214,8 @@ export function AgentPage(p: { images: CastCard[]; models: { id: string; availab
           <span className="ag-badge" title="Agent mode is new: expect rough edges">Experimental</span>
         </div>
 
+        {local && <DirectorPicker say={p.say} />}
+
         {!proj && (
           <div className="ag-new">
             <b>New project</b>
@@ -407,6 +409,68 @@ export function AgentPage(p: { images: CastCard[]; models: { id: string; availab
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+/** On LOCAL: which model directs, at which quantization, and the command that starts it. */
+function DirectorPicker(p: { say: (m: string) => void }) {
+  const [st, setSt] = useState<DirectorStatus | null>(null);
+  const [open, setOpen] = useState(false);
+  const load = useCallback(() => void api.directorGet().then(setSt).catch(() => {}), []);
+  useEffect(load, [load]);
+  if (!st) return null;
+  const model = st.models.find((m) => m.repo === st.choice.repo) ?? st.models[0];
+  // llama-server names the model after its file; the chosen quantization should be in it
+  const loadedOk = st.running && (st.loaded ?? []).some((x) => x.toUpperCase().includes(st.choice.quant.toUpperCase()));
+  const pick = async (repo: string, quant: string) => {
+    try {
+      await api.directorSet(repo, quant);
+      load();
+    } catch (e) {
+      p.say((e as Error).message);
+    }
+  };
+  return (
+    <div className={`ag-director ${open ? "open" : ""}`}>
+      <button className="ag-director-head" onClick={() => setOpen((x) => !x)} aria-expanded={open}>
+        <i className={loadedOk ? "ok" : st.running ? "warn" : "bad"} aria-hidden />
+        <span>Director <b>{st.label}</b></span>
+        <small>{loadedOk ? "running" : st.running ? "another model is loaded" : "not running"}</small>
+      </button>
+      {open && (
+        <div className="ag-director-body">
+          <label>
+            <span>Model</span>
+            <select value={model.repo} onChange={(e) => { const m = st.models.find((x) => x.repo === e.target.value)!; void pick(m.repo, m.quants.some((q) => q.quant === m.quant) ? m.quant : m.quants[0]?.quant ?? m.quant); }}>
+              {st.models.map((m) => (
+                <option key={m.repo} value={m.repo}>{m.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Quantization</span>
+            <select value={st.choice.quant} onChange={(e) => void pick(model.repo, e.target.value)}>
+              {(model.quants.length ? model.quants : [{ quant: st.choice.quant, gb: 0 }]).map((q) => (
+                <option key={q.quant} value={q.quant}>{q.quant}{q.gb ? ` · ${q.gb} GB` : ""}</option>
+              ))}
+            </select>
+          </label>
+          <small>{model.note} <a href={`https://huggingface.co/${model.repo}`} target="_blank" rel="noreferrer">Hugging Face</a></small>
+          {model.uncensored && <small className="vp-warn">Refusals removed: the director's rules (no celebrity likenesses, real people only from your own pictures, no logos) are only prompt instructions to this model.</small>}
+          <span className="vp-label">{loadedOk ? "Running at" : "Start it on the machine that runs it"}</span>
+          {loadedOk ? (
+            <code>{st.url}</code>
+          ) : (
+            <div className="ag-director-cmd">
+              <code>{st.command}</code>
+              <button onClick={() => void navigator.clipboard?.writeText(st.command).then(() => p.say("Copied the command"), () => {})}>Copy</button>
+            </div>
+          )}
+          <small>The first start downloads the file from Hugging Face. On API the director is {st.cloud} through the Comfy API.</small>
+          <button className="ag-director-check" onClick={load}>Check again</button>
+        </div>
+      )}
     </div>
   );
 }

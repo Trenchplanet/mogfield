@@ -1248,6 +1248,22 @@ button.lp-tile:hover:not(:disabled) { background: var(--card); }
 .be-download { display: grid; gap: 6px; margin: 8px 0; }
 .be-download .btn { justify-self: start; text-decoration: none; }
 .be-download code { font-size: 12px; }
+.ag-director { margin: 0 12px 8px; border-radius: 14px; background: var(--card); }
+.ag-director-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; background: none; text-align: left; font-size: 13px; }
+.ag-director-head span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.ag-director-head b { color: var(--text); }
+.ag-director-head small { color: var(--text-2); }
+.ag-director-head i { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: #ff453a; }
+.ag-director-head i.ok { background: #30d158; }
+.ag-director-head i.warn { background: #ffd60a; }
+.ag-director-body { display: grid; gap: 8px; padding: 0 12px 12px; font-size: 13px; }
+.ag-director-body label { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-2); }
+.ag-director-body select { min-width: 0; max-width: 70%; background: var(--card-2); color: var(--text); border: 0; border-radius: 999px; padding: 6px 10px; font: inherit; font-weight: 600; }
+.ag-director-body small { color: var(--text-2); }
+.ag-director-body code { display: block; padding: 8px 10px; border-radius: 10px; background: var(--card-2); font-size: 12px; overflow-wrap: anywhere; }
+.ag-director-cmd { display: flex; gap: 6px; align-items: stretch; }
+.ag-director-cmd code { flex: 1; min-width: 0; }
+.ag-director-check { justify-self: start; }
 .ag-icon { flex: 0 0 auto; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--card); color: var(--text); font-size: 15px; text-decoration: none; }
 .ag-rename { flex: 1; min-width: 0; background: var(--card); color: var(--text); border: 0; border-radius: 12px; padding: 9px 10px; font: inherit; font-weight: 600; }
 .ag-new { display: grid; gap: 6px; margin: 0 12px 8px; padding: 12px; border-radius: 14px; background: var(--card); }

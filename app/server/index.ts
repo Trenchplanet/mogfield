@@ -56,8 +56,8 @@ if (PER_VISITOR) {
       const owner = ownerOf(token);
       if (owner && owner !== vid) return c.json({ error: "not found" }, 404);
     }
-    // pointing the shared server at another ComfyUI is the owner's call, not a visitor's
-    if (c.req.path === "/api/backend" && c.req.method !== "GET") return c.json({ error: "not available on the public demo" }, 403);
+    // pointing the shared server at another ComfyUI or director model is the owner's call, not a visitor's
+    if ((c.req.path === "/api/backend" || c.req.path === "/api/agent/director") && c.req.method !== "GET") return c.json({ error: "not available on the public demo" }, 403);
     await runAs(vid, next);
     if (c.req.path.startsWith("/api/")) c.res.headers.set("Cache-Control", "private, no-store");
     else if (c.req.path.startsWith("/media/")) c.res.headers.set("Cache-Control", "private, max-age=3600");

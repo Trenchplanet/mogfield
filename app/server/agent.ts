@@ -3,8 +3,10 @@
 // for approval at every paid step: storyboard -> key frames -> shots -> film.
 //
 // The director is Claude through the Comfy model router, on the same Comfy API
-// key as everything else. Key frames are Nano Banana 2.1 with the cast as
-// references; shots are the Video > Create workflow started on each frame.
+// key as everything else. With Where it runs on LOCAL it is Gemma 4 12B
+// (Google's 4-bit QAT build) on your own OpenAI-style server, e.g. llama-server.
+// Key frames are Nano Banana 2.1 with the cast as references; shots are the
+// Video > Create workflow started on each frame.
 
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -15,6 +17,7 @@ import type { Hono } from "hono";
 import { comfy } from "@comfyorg/sdk";
 import { currentBackend } from "./backend.js";
 import { storyboardFrame } from "./characters.js";
+import { DIRECTOR_MODELS, LOCAL_AGENT_URL, directorChoice, directorLabel, directorModelName, loadedModels, quantsOf, setDirector, startCommand } from "./director.js";
 import { framesGraph } from "./frames.js";
 import { DATA_DIR, RENDER_DIR } from "./config.js";
 import { concatShots } from "./media.js";
@@ -25,6 +28,9 @@ import {
 import { listTakes, startFramesTake } from "./t2v.js";
 
 export const AGENT_MODEL = process.env.MOGFIELD_AGENT_MODEL?.trim() || "anthropic/claude-sonnet-5-5";
+/** LOCAL uses the local director (director.ts) unless MOGFIELD_AGENT_URL=off keeps Claude. */
+export const localDirector = () => currentBackend().target === "custom" && LOCAL_AGENT_URL !== "off";
+export const directorName = () => (localDirector() ? directorLabel() : AGENT_MODEL);
 const FILE = join(DATA_DIR, "agent.json");
 const MAX_SHOTS = 12;
 
@@ -115,6 +121,60 @@ Answer with ONE JSON object and nothing else:
 
 type DirectorAnswer = { reply?: string; questions?: unknown; storyboard?: unknown };
 
+// The answer's shape, sent to the local server as a JSON schema: llama-server turns it into a
+// grammar, so even a small model always returns a storyboard the app can read.
+const STR = { type: "string" };
+const ANSWER_SCHEMA = {
+  type: "object",
+  properties: {
+    reply: STR,
+    questions: { type: "array", items: STR, maxItems: 3 },
+    storyboard: {
+      anyOf: [
+        { type: "null" },
+        {
+          type: "object",
+          properties: {
+            title: STR, logline: STR, style: STR, aspect: STR, model: STR, quality: STR, audio: { type: "boolean" },
+            characters: { type: "array", maxItems: 12, items: { type: "object", properties: { name: STR, look: STR, cast: { type: "integer" } }, required: ["name", "look"] } },
+            shots: {
+              type: "array", minItems: 1, maxItems: MAX_SHOTS,
+              items: {
+                type: "object",
+                properties: { title: STR, size: STR, angle: STR, movement: STR, lens: STR, lighting: STR, seconds: { type: "number" }, action: STR, sound: STR, framePrompt: STR, videoPrompt: STR, cast: { type: "array", items: { type: "integer" } } },
+                required: ["title", "size", "angle", "movement", "lens", "lighting", "seconds", "action", "framePrompt", "videoPrompt"],
+              },
+            },
+          },
+          required: ["title", "style", "aspect", "model", "quality", "shots"],
+        },
+      ],
+    },
+  },
+  required: ["reply", "storyboard"],
+};
+
+/** One turn on the local director (OpenAI-style /chat/completions: llama-server, Ollama, LM Studio). */
+async function localChat(system: string, messages: { role: string; content: string }[]): Promise<{ text: string; truncated: boolean }> {
+  const res = await fetch(`${LOCAL_AGENT_URL}/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: directorModelName(),
+      max_tokens: 16000,
+      messages: [{ role: "system", content: system }, ...messages],
+      response_format: { type: "json_schema", json_schema: { name: "director", strict: true, schema: ANSWER_SCHEMA } },
+    }),
+    signal: AbortSignal.timeout(15 * 60_000),
+  }).catch((e: Error) => {
+    throw new Error(`the local director is not running at ${LOCAL_AGENT_URL} (${e.message}). Start it with: ${startCommand()}`);
+  });
+  if (!res.ok) throw new Error(`the local director answered HTTP ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
+  const data = (await res.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
+  const choice = data.choices?.[0];
+  return { text: choice?.message?.content ?? "", truncated: choice?.finish_reason === "length" };
+}
+
 function parseAnswer(text: string): DirectorAnswer {
   const a = text.indexOf("{");
   const b = text.lastIndexOf("}");
@@ -178,10 +238,17 @@ async function direct(p: AgentProject, lookup: CastLookup) {
     role: m.role === "user" ? "user" : "assistant",
     content: i === all.length - 1 && m.role === "user" ? `${context}\n\n---\n\n${m.text}` : m.text,
   }));
-  const res = await comfy.models.run(AGENT_MODEL, { max_tokens: 24000, system: SYSTEM, messages });
-  const data = res.data as { content?: { type: string; text?: string }[]; stop_reason?: string };
-  if (data.stop_reason === "max_tokens") throw new Error("the storyboard ran too long to finish; ask for fewer shots or shorter prompts");
-  const text = (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("");
+  let text: string;
+  if (localDirector()) {
+    const r = await localChat(SYSTEM, messages);
+    if (r.truncated) throw new Error("the storyboard ran too long to finish; ask for fewer shots, or start llama-server with a larger -c");
+    text = r.text;
+  } else {
+    const res = await comfy.models.run(AGENT_MODEL, { max_tokens: 24000, system: SYSTEM, messages });
+    const data = res.data as { content?: { type: string; text?: string }[]; stop_reason?: string };
+    if (data.stop_reason === "max_tokens") throw new Error("the storyboard ran too long to finish; ask for fewer shots or shorter prompts");
+    text = (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("");
+  }
   const answer = parseAnswer(text);
   const board = cleanBoard(answer.storyboard, p.castIds, p.board, s);
   if (board) {
@@ -328,7 +395,7 @@ export function agentRoutes(app: Hono, lookup: CastLookup) {
     // the project's characters with their pictures, including ones uploaded only into this project
     cast: p.castIds.map((id) => lookup(id)).map((c, i) => c && { id: p.castIds[i], url: c.url, prompt: c.prompt }).filter((c): c is { id: string; url: string; prompt: string } => !!c),
     quote: quote(p),
-    director: AGENT_MODEL,
+    director: directorName(),
   });
   const cleanSettings = (b: Record<string, unknown>, base: AgentSettings): AgentSettings => {
     const model = typeof b.model === "string" && b.model in FRAME_MODELS ? (b.model as FrameModel) : base.model;
@@ -341,6 +408,22 @@ export function agentRoutes(app: Hono, lookup: CastLookup) {
   const hasKey = () => !!process.env.COMFY_API_KEY?.trim();
 
   app.get("/api/agent", (c) => c.json([...projects.values()].sort((a, b) => b.updatedAt - a.updatedAt).map((p) => ({ id: p.id, title: p.title, stage: p.stage, updatedAt: p.updatedAt, model: settingsOf(p).model, cast: p.castIds.length, thumb: p.board?.shots.find((s) => s.frame?.url)?.frame?.url }))));
+
+  // the local director model: the choices, their quantizations from Hugging Face, and what the server has loaded
+  app.get("/api/agent/director", async (c) => {
+    const models = await Promise.all(DIRECTOR_MODELS.map(async (m) => ({ ...m, quants: await quantsOf(m.repo).catch(() => []) })));
+    const loaded = await loadedModels();
+    return c.json({ local: localDirector(), url: LOCAL_AGENT_URL, choice: directorChoice(), command: startCommand(), label: directorLabel(), running: loaded.running, loaded: loaded.models, models, cloud: AGENT_MODEL });
+  });
+  app.post("/api/agent/director", async (c) => {
+    const b = (await c.req.json().catch(() => ({}))) as { repo?: unknown; quant?: unknown };
+    const model = DIRECTOR_MODELS.find((m) => m.repo === b.repo);
+    if (!model || typeof b.quant !== "string") return c.json({ error: "pick a director model and a quantization" }, 400);
+    const quants = await quantsOf(model.repo).catch(() => []);
+    if (quants.length && !quants.some((q) => q.quant === b.quant)) return c.json({ error: `${model.label} has no ${b.quant} file` }, 400);
+    await setDirector({ repo: model.repo, quant: b.quant });
+    return c.json({ choice: directorChoice(), command: startCommand(), label: directorLabel() });
+  });
 
   // a new project: its own name, workflow and cast
   app.post("/api/agent", async (c) => {
@@ -394,7 +477,8 @@ export function agentRoutes(app: Hono, lookup: CastLookup) {
   app.post("/api/agent/:id/message", async (c) => {
     const p = need(c.req.param("id"));
     if (!p) return c.json({ error: "no such project" }, 404);
-    if (!hasKey()) return c.json({ error: "Agent mode needs COMFY_API_KEY in app/.env" }, 400);
+    // the local director needs no key; Claude goes through the Comfy API
+    if (!localDirector() && !hasKey()) return c.json({ error: "Agent mode needs COMFY_API_KEY in app/.env, or switch Where it runs to LOCAL for the local director" }, 400);
     if (p.thinking) return c.json({ error: "The director is still answering" }, 409);
     const b = (await c.req.json().catch(() => ({}))) as { text?: unknown; castIds?: unknown };
     const text = str(b.text, 4000);
@@ -472,7 +556,8 @@ export function agentRoutes(app: Hono, lookup: CastLookup) {
   app.post("/api/agent/:id/film", async (c) => {
     const p = need(c.req.param("id"));
     if (!p?.board) return c.json({ error: "no storyboard yet" }, 404);
-    if (!hasKey()) return c.json({ error: "Agent mode needs COMFY_API_KEY in app/.env" }, 400);
+    // Pika H3 Flex films on your own ComfyUI without a key; the partner models need one
+    if (!hasKey() && !(p.board.model === "pika-h3" && currentBackend().target === "custom")) return c.json({ error: "Agent mode needs COMFY_API_KEY in app/.env" }, 400);
     const b = (await c.req.json().catch(() => ({}))) as { shotIds?: unknown };
     const missing = p.board.shots.filter((s) => s.frame?.status !== "succeeded");
     if (missing.length) return c.json({ error: `Shot ${p.board.shots.indexOf(missing[0]) + 1} has no key frame yet` }, 400);
