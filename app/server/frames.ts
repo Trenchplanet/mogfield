@@ -135,8 +135,9 @@ export function framesGraph(i: FramesInput): { graph: Record<string, Node>; outI
 export async function runFrames(i: FramesInput, outPath: string, hooks: ProviderHooks): Promise<void> {
   const key = process.env.COMFY_API_KEY?.trim();
   const local = currentBackend().target === "custom";
-  // partner nodes always need the key; Pika's open-weights workflow only on Comfy Cloud
-  if (!key && (i.model !== "pika-h3" || !local)) throw new Error("Comfy API key missing: add COMFY_API_KEY to app/.env and restart");
+  // Comfy Cloud does not serve Pika H3 Flex: it runs on your own ComfyUI, without a key
+  if (i.model === "pika-h3" && !local) throw new Error("Pika H3 Flex runs on your own ComfyUI: switch Where it runs to LOCAL");
+  if (!key && i.model !== "pika-h3") throw new Error("Comfy API key missing: add COMFY_API_KEY to app/.env and restart");
   const { graph, outId, files } = framesGraph(i);
   await writeFile(outPath.replace(/\.mp4$/i, "") + ".workflow.json", JSON.stringify(graph, null, 2)).catch(() => {});
   const c = comfyClient();

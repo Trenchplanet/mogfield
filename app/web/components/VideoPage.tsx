@@ -13,7 +13,7 @@ export type EditTool = "extend" | "reshoot";
 
 const MAX_REFS = 4;
 const MODEL_LINE: Record<FrameModel, string> = {
-  "pika-h3": "Open weights. Text, frames or reference pictures, with sound, up to 15 s.",
+  "pika-h3": "Your own ComfyUI (LOCAL). Text, frames or reference pictures, with sound, up to 15 s.",
   "seedance-2-5": "Text, frames and reference images, up to 30 s.",
   "seedance-2-0": "Steady, cinematic, up to 15 s and 4K.",
   "seedance-2-0-fast": "Quicker and cheaper, up to 15 s.",
@@ -52,6 +52,17 @@ const HOW: Record<string, { title: string; line: string }[]> = {
 };
 
 // 0: open weights, no per-clip price
+const PIKA_LOCAL = "Pika H3 Flex runs on your own ComfyUI: switch Where it runs to LOCAL, or pick another model";
+
+/** Whether Pika H3 Flex can run (LOCAL is on); switches the form to it once when it becomes available. */
+function usePikaDefault(models: ModelOption[], setModel: (m: FrameModel) => void): boolean {
+  const local = models.some((m) => m.id === "pika:h3-flex" && m.available);
+  useEffect(() => {
+    if (local) setModel("pika-h3");
+  }, [local]); // eslint-disable-line react-hooks/exhaustive-deps
+  return local;
+}
+
 const usd = (n: number | null) => (n === null || n === 0 ? "" : ` · ${formatUsd(n)}`);
 const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
@@ -109,7 +120,7 @@ export function VideoPage(p: {
           <CreateForm images={p.images} onNewImage={p.onNewImage} models={p.models} apiMode={p.apiMode} say={p.say} onTake={added} />
         </div>
         <div style={{ display: p.sub === "edit" && p.tool === "extend" ? "contents" : "none" }}>
-          <ExtendForm clip={p.clip} take={extendTake} onClearTake={() => setExtendTake(null)} onPickVideo={() => { setExtendTake(null); p.onPickVideo(); }} say={p.say} onTake={added} />
+          <ExtendForm clip={p.clip} take={extendTake} models={p.models} onClearTake={() => setExtendTake(null)} onPickVideo={() => { setExtendTake(null); p.onPickVideo(); }} say={p.say} onTake={added} />
         </div>
         <div style={{ display: p.sub === "edit" && p.tool === "reshoot" ? "contents" : "none" }}>
           <ReshootForm clip={p.clip} trim={p.trim} models={p.models} onPickVideo={p.onPickVideo} onStart={p.onReshoot} />
@@ -233,7 +244,7 @@ export function CatalogList({ list, current, onPick, title }: { list: { ready: b
 }
 
 function CreateForm(p: { images: CastCard[]; onNewImage: (c: CastCard) => void; models: ModelOption[]; apiMode: boolean; say: (m: string) => void; onTake: (t: T2vTake) => void }) {
-  const [model, setModel] = useState<FrameModel>("pika-h3");
+  const [model, setModel] = useState<FrameModel>("seedance-2-5");
   // any other model from the Comfy API catalog, picked from the full list
   const [other, setOther] = useState<CatalogModel | null>(null);
   const catalog = useCatalog(p.apiMode, "video");
@@ -250,6 +261,8 @@ function CreateForm(p: { images: CastCard[]; onNewImage: (c: CastCard) => void; 
   const [busy, setBusy] = useState(false);
   const refFile = useRef<HTMLInputElement>(null);
 
+  // Pika H3 Flex runs on your own ComfyUI only: the default when LOCAL is on
+  const local = usePikaDefault(p.models, setModel);
   // the catalog list only exists with the API switch on
   const picked = p.apiMode ? other : null;
   const m = FRAME_MODELS[model];
@@ -264,6 +277,8 @@ function CreateForm(p: { images: CastCard[]; onNewImage: (c: CastCard) => void; 
   const pictures = [start?.id, end?.id, ...refs].filter((x): x is string => !!x);
   const blocked = picked
     ? null
+    : model === "pika-h3" && !local
+    ? PIKA_LOCAL
     : m.needsStart && !start
     ? `${m.label} starts on a start frame: add one, or pick another model`
     : m.text && end && !start
@@ -369,8 +384,8 @@ function CreateForm(p: { images: CastCard[]; onNewImage: (c: CastCard) => void; 
 
 /* ---------------------------------------------------------------- Extend Video */
 
-function ExtendForm(p: { clip: Clip | null; take: T2vTake | null; onClearTake: () => void; onPickVideo: () => void; say: (m: string) => void; onTake: (t: T2vTake) => void }) {
-  const [model, setModel] = useState<FrameModel>("pika-h3");
+function ExtendForm(p: { clip: Clip | null; take: T2vTake | null; models: ModelOption[]; onClearTake: () => void; onPickVideo: () => void; say: (m: string) => void; onTake: (t: T2vTake) => void }) {
+  const [model, setModel] = useState<FrameModel>("seedance-2-5");
   const [picking, setPicking] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [seconds, setSeconds] = useState(5);
@@ -384,6 +399,8 @@ function ExtendForm(p: { clip: Clip | null; take: T2vTake | null; onClearTake: (
   const at = from === null || from > total ? total : from;
   useEffect(() => setFrom(null), [src?.url]);
 
+  const local = usePikaDefault(p.models, setModel);
+  const blocked = model === "pika-h3" && !local ? PIKA_LOCAL : null;
   const m = FRAME_MODELS[model];
   const q = (m.qualities as readonly string[]).includes(quality) ? quality : m.qualities[0];
   const secs = snapSeconds(model, Math.min(m.max, Math.max(m.min, seconds)));
@@ -391,7 +408,7 @@ function ExtendForm(p: { clip: Clip | null; take: T2vTake | null; onClearTake: (
   const cost = frameModelUsd(model, q, secs);
 
   const go = async () => {
-    if (!src || busy || !total) return;
+    if (!src || busy || !total || blocked) return;
     setBusy(true);
     try {
       const take = await api.extend({ ...(p.take ? { takeId: p.take.id } : { clipId: p.clip!.id }), from: at, prompt: prompt.trim(), model, quality: q, seconds: secs, audio });
@@ -443,10 +460,11 @@ function ExtendForm(p: { clip: Clip | null; take: T2vTake | null; onClearTake: (
             <button className={`vp-audio ${audio ? "on" : ""}`} onClick={() => setAudio((x) => !x)} aria-pressed={audio}>Audio {audio ? "on" : "off"}</button>
           )}
         </div>
+        {blocked && <small className="vp-warn">{blocked}</small>}
         <OpenInComfy say={p.say} settings={() => ({ tool: "extend", model, prompt, quality: q, seconds: secs, audio, aspect: p.clip && p.clip.width < p.clip.height ? "9:16" : "16:9" })} />
       </div>
       <div className="vp-foot">
-        <button className="vp-go" disabled={!src || busy || !total} onClick={go}>{busy ? "Starting…" : `Extend +${secs}s${usd(cost)}`}</button>
+        <button className="vp-go" disabled={!src || busy || !total || !!blocked} onClick={go}>{busy ? "Starting…" : `Extend +${secs}s${usd(cost)}`}</button>
       </div>
     </>
   );

@@ -10,9 +10,9 @@ schema-checked rebuilds of every graph here, laid-out editor versions, and
 
 | File | Status | What it does |
 | --- | --- | --- |
-| `backlot_pika_h3_t2v.json` | **main video model**; schema-checked, not run | Prompt → **Pika H3 Flex** (MiniMax H3 FL2VA + Pika LoRA) → video with sound |
-| `backlot_pika_h3_fl2va.json` | **main video model**; schema-checked, not run | Start frame (+ optional end frame) → **Pika H3 Flex** → video with sound. Create, Extend and the director's shots |
-| `backlot_pika_h3_ref2va.json` | **main video model**; schema-checked, not run | Up to 9 reference pictures → **Pika H3 Flex** (MiniMax H3 Ref2VA + Pika LoRA) → video with sound. Create with references, and the Studio with a character sheet |
+| `backlot_pika_h3_t2v.json` | LOCAL only; schema-checked, not run | Prompt → **Pika H3 Flex** (MiniMax H3 FL2VA + Pika LoRA) → video with sound |
+| `backlot_pika_h3_fl2va.json` | LOCAL only; schema-checked, not run | Start frame (+ optional end frame) → **Pika H3 Flex** → video with sound. Create, Extend and the director's shots |
+| `backlot_pika_h3_ref2va.json` | LOCAL only; schema-checked, not run | Up to 9 reference pictures → **Pika H3 Flex** (MiniMax H3 Ref2VA + Pika LoRA) → video with sound. Create with references, and the Studio with a character sheet |
 | `backlot_direct.json` | ships | Take → Depth Anything V2 → **CameraRig** (depth-reprojected camera move) → **LensKit** → **GradeLUT** → **Letterbox** → MP4 |
 | `backlot_depth.json` | drafted, untested — needs GPU run | Take → Depth Anything V2 → depth MP4 for the monitor's depth view (bright = near) |
 | `backlot_recast.json` | drafted, untested — needs GPU run | Take → Depth Anything V2 → **CameraRig** → LTX 2.5 distilled v2v (union-control IC-LoRA on the moved depth, ingredients IC-LoRA on the `BL:cast` sheet) → **LensKit** → **GradeLUT** → **Letterbox** → MP4 |
@@ -31,17 +31,20 @@ your own ComfyUI the partner node is paid with your Comfy API key, which the
 server sends with the job and never stores. Set `MOGFIELD_SEEDANCE_VIA=router`
 to send Seedance through the Comfy model router instead.
 
-## Pika H3 Flex (main video model)
+## Pika H3 Flex (LOCAL only)
 
 The three `backlot_pika_h3_*.json` graphs come from ComfyUI's own templates
 (`video_pika_h3_flex_t2v`, `_fl2va`, `_ref2va`), converted to API format with
 comfy-cli's converter. The template's subgraph, resolution selector and
 frame-count math were flattened out so the server sets `width`, `height` and
 `length` on the node titled `BL:h3` itself (`app/server/pika.ts`). The sampler
-settings were kept: LCM, 6 manual sigmas, LoRA strength 1.0. Pika H3 Flex is the
-default in Create, Extend and the Studio, and the director's default
-(`pika-h3`). It runs on Comfy Cloud or your own ComfyUI. It always makes sound,
-so the Studio keeps the model's audio.
+settings were kept: LCM, 6 manual sigmas, LoRA strength 1.0. Comfy Cloud and
+the Comfy API do not serve Pika H3 Flex, so it runs only when **Where it runs**
+is set to LOCAL (your own ComfyUI, e.g. a GPU pod). It needs no Comfy API key.
+With LOCAL on, Pika H3 Flex is the default in Create, Extend and the Studio.
+With API on, it is shown as unavailable and the other models stay the default.
+The director can pick `pika-h3`, but its default remains Seedance. Pika always
+makes sound, so the Studio keeps the model's audio.
 
 | Title | Node | Set by the server |
 | --- | --- | --- |

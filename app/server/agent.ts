@@ -56,7 +56,7 @@ const touch = (p: AgentProject) => {
 const MODEL_NOTES = (Object.keys(FRAME_MODELS) as FrameModel[])
   .map((id) => {
     const m = FRAME_MODELS[id];
-    const price = id === "pika-h3" ? "open weights, no per-clip price (GPU time only)" : `about $${frameModelUsd(id, m.qualities[0], 5).toFixed(2)} for 5 s at ${m.qualities[0]}`;
+    const price = id === "pika-h3" ? "open weights on the user's own ComfyUI (LOCAL only), no per-clip price" : `about $${frameModelUsd(id, m.qualities[0], 5).toFixed(2)} for 5 s at ${m.qualities[0]}`;
     return `- "${id}": ${m.label}, ${m.min}-${m.max} s, qualities ${m.qualities.join("/")}, ${price}`;
   })
   .join("\n");
@@ -87,7 +87,7 @@ Writing the prompts:
 - Repeat each character's look (face, hair, age, wardrobe) word for word in every prompt they appear in, and repeat the style, so every shot looks like the same film.
 - Real people: only by the user's own pictures (the cast). Never name or imitate celebrities. No logos, no on-screen text unless asked.
 
-Video models (pick one for the whole film; default "pika-h3" (Pika H3 Flex, the main video model) at 480p for a first cut unless the user asks for another model; every shot's seconds must fit the model):
+Video models (pick one for the whole film; default "seedance-2-0-fast" at 480p for a cheap first cut unless the user wants quality; "pika-h3" only runs when the user's ComfyUI is set to LOCAL; every shot's seconds must fit the model):
 ${MODEL_NOTES}
 Aspect ratios: ${Object.keys(T2V_ASPECTS).join(", ")} (default 9:16 for social, 16:9 or 21:9 for cinematic).
 
@@ -97,7 +97,7 @@ Answer with ONE JSON object and nothing else:
   "questions": ["only when you need answers before storyboarding"],
   "storyboard": null or {
     "title": "...", "logline": "one sentence", "style": "the look in one sentence, repeated in prompts",
-    "aspect": "9:16", "model": "pika-h3", "quality": "480p", "audio": true,
+    "aspect": "9:16", "model": "seedance-2-0-fast", "quality": "480p", "audio": true,
     "characters": [{ "name": "...", "look": "face, hair, age, wardrobe", "cast": 1 }],
     "shots": [{ "title": "...", "size": "WS", "angle": "eye level", "movement": "slow push in", "lens": "35mm", "lighting": "...", "seconds": 5, "action": "...", "sound": "...", "framePrompt": "...", "videoPrompt": "...", "cast": [1] }]
   }
@@ -123,7 +123,7 @@ const str = (v: unknown, max = 600) => (typeof v === "string" ? v.trim().slice(0
 function cleanBoard(raw: unknown, castIds: string[], prev?: AgentBoard): AgentBoard | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const r = raw as Record<string, unknown>;
-  const model: FrameModel = typeof r.model === "string" && r.model in FRAME_MODELS ? (r.model as FrameModel) : prev?.model ?? "pika-h3";
+  const model: FrameModel = typeof r.model === "string" && r.model in FRAME_MODELS ? (r.model as FrameModel) : prev?.model ?? "seedance-2-0-fast";
   const m = FRAME_MODELS[model];
   const quality = typeof r.quality === "string" && m.qualities.includes(r.quality) ? r.quality : m.qualities[0];
   const aspect: T2vAspect = typeof r.aspect === "string" && r.aspect in T2V_ASPECTS ? (r.aspect as T2vAspect) : prev?.aspect ?? "9:16";

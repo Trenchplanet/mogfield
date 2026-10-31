@@ -43,7 +43,7 @@ keep using the per-workflow API files.
 
 `editor/pika_h3_flex_{t2v,fl2va,ref2va}.json` are ComfyUI's Pika H3 Flex templates, unchanged
 (fetched 2026-10-31), for opening in the editor. The API graphs the server runs are
-`../backlot_pika_h3_*.json` (see [`../README.md`](../README.md#pika-h3-flex-main-video-model)).
+`../backlot_pika_h3_*.json` (see [`../README.md`](../README.md#pika-h3-flex-local-only)).
 
 `local/minimax_h3_character_swap_pro4500_v1.json` is an editor graph that the server does not
 load, so it was not rebuilt.

@@ -5,8 +5,8 @@
 //   workflows/backlot_pika_h3_fl2va.json   a start frame, optionally an end frame
 //   workflows/backlot_pika_h3_ref2va.json  up to 9 reference pictures
 //
-// It runs on Comfy Cloud or your own ComfyUI like every other workflow; the
-// model files listed in workflows/README.md must be installed on that target.
+// Comfy Cloud does not serve it, so it runs on your own ComfyUI (LOCAL) only,
+// with the model files listed in workflows/README.md installed there.
 // H3 always makes sound with the picture.
 
 import { readFileSync } from "node:fs";

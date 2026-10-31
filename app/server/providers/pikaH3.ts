@@ -2,6 +2,7 @@
 // (workflows/backlot_pika_h3_ref2va.json), or the prompt alone without one
 // (backlot_pika_h3_t2v.json). Like MiniMax H3 it does not see the take: the
 // prompt carries the measured camera and subject motion, and it makes its own sound.
+// Comfy Cloud does not serve it, so it is only offered on LOCAL (your own ComfyUI).
 
 import { currentBackend } from "../backend.js";
 import { runFrames } from "../frames.js";
@@ -12,7 +13,7 @@ export const pikaH3: Provider = {
   label: "Pika H3 Flex",
 
   async models(): Promise<ModelOption[]> {
-    const ready = currentBackend().target === "custom" || !!process.env.COMFY_API_KEY?.trim();
+    const ready = currentBackend().target === "custom";
     return [
       {
         id: "pika:h3-flex",
@@ -23,7 +24,7 @@ export const pikaH3: Provider = {
         maxSeconds: 15,
         inputMode: "text-image",
         available: ready,
-        needs: ready ? undefined : "Add COMFY_API_KEY to app/.env, or connect your own ComfyUI",
+        needs: ready ? undefined : "Runs on your own ComfyUI: switch Where it runs to LOCAL",
       },
     ];
   },
