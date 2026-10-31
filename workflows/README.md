@@ -10,6 +10,9 @@ schema-checked rebuilds of every graph here, laid-out editor versions, and
 
 | File | Status | What it does |
 | --- | --- | --- |
+| `backlot_pika_h3_t2v.json` | **main video model**; schema-checked, not run | Prompt → **Pika H3 Flex** (MiniMax H3 FL2VA + Pika LoRA) → video with sound |
+| `backlot_pika_h3_fl2va.json` | **main video model**; schema-checked, not run | Start frame (+ optional end frame) → **Pika H3 Flex** → video with sound. Create, Extend and the director's shots |
+| `backlot_pika_h3_ref2va.json` | **main video model**; schema-checked, not run | Up to 9 reference pictures → **Pika H3 Flex** (MiniMax H3 Ref2VA + Pika LoRA) → video with sound. Create with references, and the Studio with a character sheet |
 | `backlot_direct.json` | ships | Take → Depth Anything V2 → **CameraRig** (depth-reprojected camera move) → **LensKit** → **GradeLUT** → **Letterbox** → MP4 |
 | `backlot_depth.json` | drafted, untested — needs GPU run | Take → Depth Anything V2 → depth MP4 for the monitor's depth view (bright = near) |
 | `backlot_recast.json` | drafted, untested — needs GPU run | Take → Depth Anything V2 → **CameraRig** → LTX 2.5 distilled v2v (union-control IC-LoRA on the moved depth, ingredients IC-LoRA on the `BL:cast` sheet) → **LensKit** → **GradeLUT** → **Letterbox** → MP4 |
@@ -27,6 +30,48 @@ The same graph runs on Comfy Cloud (API) and on your own ComfyUI (LOCAL); on
 your own ComfyUI the partner node is paid with your Comfy API key, which the
 server sends with the job and never stores. Set `MOGFIELD_SEEDANCE_VIA=router`
 to send Seedance through the Comfy model router instead.
+
+## Pika H3 Flex (main video model)
+
+The three `backlot_pika_h3_*.json` graphs come from ComfyUI's own templates
+(`video_pika_h3_flex_t2v`, `_fl2va`, `_ref2va`), converted to API format with
+comfy-cli's converter. The template's subgraph, resolution selector and
+frame-count math were flattened out so the server sets `width`, `height` and
+`length` on the node titled `BL:h3` itself (`app/server/pika.ts`). The sampler
+settings were kept: LCM, 6 manual sigmas, LoRA strength 1.0. Pika H3 Flex is the
+default in Create, Extend and the Studio, and the director's default
+(`pika-h3`). It runs on Comfy Cloud or your own ComfyUI. It always makes sound,
+so the Studio keeps the model's audio.
+
+| Title | Node | Set by the server |
+| --- | --- | --- |
+| `BL:h3` | MiniMaxH3ImageToVideo / MiniMaxH3ReferenceToVideo | `prompt`, `width`, `height`, `length` (17n+5 frames at 24 fps, 5–15 s) |
+| `BL:seed` | RandomNoise | `noise_seed` |
+| `BL:start-frame`, `BL:end-frame` | LoadImage (fl2va) | `image`; the end frame is removed when there isn't one |
+| `BL:cast`, `BL:cast-2`… | LoadImage (ref2va) | `image`; one node per reference picture, up to 9 |
+| `BL:lora`, `BL:unet` | LoraLoaderModelOnly, UNETLoader | not set (the Pika LoRA and the H3 base) |
+| `BL:output` | SaveVideo | the output the server downloads |
+
+The target needs these files. They are listed in the templates' notes, and the
+H3 base files are shared with the other H3 graphs:
+
+```
+models/vae/minimax_h3_video_vae_int8_convrot.safetensors        2.6 GB
+models/vae/minimax_h3_audio_vae_fp32.safetensors                0.6 GB
+models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors 14.6 GB
+models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors   19.5 GB  (t2v, fl2va)
+models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors  19.5 GB  (ref2va)
+models/loras/pika_h3_flex_fl2va_v1_bf16.safetensors                         (t2v, fl2va)
+models/loras/pika_h3_flex_ref2va_v1_bf16.safetensors                        (ref2va)
+```
+
+They come from [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) on Hugging Face.
+Pika's own release is at [Pika-Labs/Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex).
+The adapter runs on the MiniMax H3 base weights, so the H3 licence terms below
+apply too. Check Pika's licence for the adapter itself before commercial use.
+Every class validates against a live ComfyUI (core v0.43.0). The only errors
+left are the model files above, which are not installed on the Mac this was
+built on. None of the graphs has been run yet.
 
 ## Local MiniMax H3 character swap
 

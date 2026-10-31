@@ -94,7 +94,8 @@ export async function runRecast(i: PipelineInput, hooks: PipelineHooks) {
   if (target.provider.id === "h3") return runH3Swap(i, target, hooks);
   if (target.provider.id === "refv") return runRefVideo(i, target, hooks);
   const textOnlyLtx = target.provider.id === "comfy" && target.model.startsWith("ltx/ltx-2-5-");
-  const miniMaxH3 = target.provider.id === "comfy" && target.model === "minimax/minimax-h3";
+  // MiniMax H3 and Pika H3 Flex take pictures and text, not the take, and make their own sound
+  const miniMaxH3 = (target.provider.id === "comfy" && target.model === "minimax/minimax-h3") || target.provider.id === "pika";
 
   // 1. depth map of the take (cached per clip), unless the user turned depth off
   const noDepth = i.useDepth === false && !i.preparedVideoPath;
@@ -202,7 +203,7 @@ export async function runRecast(i: PipelineInput, hooks: PipelineHooks) {
       signal: hooks.signal,
     },
   );
-  if (miniMaxH3) hooks.step?.("finish", "running", "keeping MiniMax's generated audio");
+  if (miniMaxH3) hooks.step?.("finish", "running", "keeping the model's generated audio");
   else {
     hooks.step?.("finish", "running", "putting your original audio back");
     await restoreSourceAudio(i.clipPath, i.outPath);

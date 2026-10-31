@@ -22,6 +22,7 @@ import { describeStyle, editCharacterPhoto, fluxCard, geminiImage, makeCharacter
 import { catalogModel, catalogModels, runCatalogModel } from "./providers/catalog.js";
 import { downloadLink } from "./links.js";
 import { checkBackend, currentBackend, loadBackend, saveBackend, type Backend } from "./backend.js";
+import { PIKA_MAX_REFS } from "./pika.js";
 import { isFrameModel, listTakes, startExtend, startFramesTake, startTake } from "./t2v.js";
 
 // the backend picked in the app (data/backend.json) wins over the .env default
@@ -1186,7 +1187,7 @@ const nearestAspect = (ratio: number) => (Object.keys(T2V_ASPECTS) as T2vAspect[
 
 // Start / end frame video: a clip that starts on one picture and/or lands on another.
 app.post("/api/frames", async (c) => {
-  const b = (await c.req.json().catch(() => ({}))) as { prompt?: unknown; startId?: unknown; endId?: unknown; model?: unknown; quality?: unknown; seconds?: unknown; aspect?: unknown; audio?: unknown };
+  const b = (await c.req.json().catch(() => ({}))) as { prompt?: unknown; startId?: unknown; endId?: unknown; refIds?: unknown; model?: unknown; quality?: unknown; seconds?: unknown; aspect?: unknown; audio?: unknown };
   if (!isFrameModel(b.model)) return c.json({ error: "pick a model" }, 400);
   const card = (x: unknown) => (typeof x === "string" ? casts.get(x) : undefined);
   const start = card(b.startId);
@@ -1210,6 +1211,10 @@ app.post("/api/frames", async (c) => {
       seconds: snapSeconds(b.model, Math.min(FRAME_MODELS[b.model].max, Math.max(FRAME_MODELS[b.model].min, typeof b.seconds === "number" ? b.seconds : 5))),
       aspect, audio: b.audio !== false,
       start: start && { id: start.id, path: start.path }, end: end && { id: end.id, path: end.path },
+      // Pika H3 Flex films from reference pictures when there is no start frame
+      refs: b.model === "pika-h3" && !start && Array.isArray(b.refIds)
+        ? b.refIds.map(card).filter((x): x is NonNullable<typeof x> => !!x).slice(0, PIKA_MAX_REFS).map((x) => ({ id: x.id, path: x.path }))
+        : undefined,
     }),
   );
 });

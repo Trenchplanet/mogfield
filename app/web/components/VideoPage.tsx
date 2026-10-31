@@ -13,6 +13,7 @@ export type EditTool = "extend" | "reshoot";
 
 const MAX_REFS = 4;
 const MODEL_LINE: Record<FrameModel, string> = {
+  "pika-h3": "Open weights. Text, frames or reference pictures, with sound, up to 15 s.",
   "seedance-2-5": "Text, frames and reference images, up to 30 s.",
   "seedance-2-0": "Steady, cinematic, up to 15 s and 4K.",
   "seedance-2-0-fast": "Quicker and cheaper, up to 15 s.",
@@ -24,7 +25,7 @@ const MODEL_LINE: Record<FrameModel, string> = {
   "ltx-2-5-pro": "Text or frames, finer detail, up to 10 s.",
 };
 /** The Comfy router model that runs a prompt (no frames) for each Seedance option.
- *  H3 and LTX 2.5 run a prompt through their own text-to-video nodes instead. */
+ *  Pika H3 Flex, H3 and LTX 2.5 run a prompt through their own workflows or text-to-video nodes instead. */
 const ROUTER: Partial<Record<FrameModel, RegExp>> = {
   "seedance-2-5": /seedance-2-5/,
   "seedance-2-0": /seedance-2-0-(?!fast|mini)/,
@@ -50,7 +51,8 @@ const HOW: Record<string, { title: string; line: string }[]> = {
   ],
 };
 
-const usd = (n: number | null) => (n === null ? "" : ` · ${formatUsd(n)}`);
+// 0: open weights, no per-clip price
+const usd = (n: number | null) => (n === null || n === 0 ? "" : ` · ${formatUsd(n)}`);
 const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
 /**
@@ -231,7 +233,7 @@ export function CatalogList({ list, current, onPick, title }: { list: { ready: b
 }
 
 function CreateForm(p: { images: CastCard[]; onNewImage: (c: CastCard) => void; models: ModelOption[]; apiMode: boolean; say: (m: string) => void; onTake: (t: T2vTake) => void }) {
-  const [model, setModel] = useState<FrameModel>("seedance-2-5");
+  const [model, setModel] = useState<FrameModel>("pika-h3");
   // any other model from the Comfy API catalog, picked from the full list
   const [other, setOther] = useState<CatalogModel | null>(null);
   const catalog = useCatalog(p.apiMode, "video");
@@ -252,7 +254,7 @@ function CreateForm(p: { images: CastCard[]; onNewImage: (c: CastCard) => void; 
   const picked = p.apiMode ? other : null;
   const m = FRAME_MODELS[model];
   const frames = !!(start || end);
-  // H3 and LTX 2.5 run frames and prompts alike as a workflow; Seedance without frames goes to the Comfy model router
+  // Pika H3 Flex, H3 and LTX 2.5 run frames and prompts alike as a workflow; Seedance without frames goes to the Comfy model router
   const workflow = !picked && (frames || !!m.text);
   const router = !picked && !workflow ? p.models.find((x) => x.available && ROUTER[model]?.test(x.id)) : undefined;
   const qualities: readonly string[] = picked ? CATALOG_QUALITIES : m.qualities;
@@ -295,7 +297,7 @@ function CreateForm(p: { images: CastCard[]; onNewImage: (c: CastCard) => void; 
       const take = picked
         ? await api.t2v({ prompt: prompt.trim(), imageIds: pictures.slice(0, MAX_REFS), model: `comfy:${picked.id}`, quality: q, seconds: secs, aspect, audio })
         : workflow
-        ? await api.frames({ prompt: prompt.trim(), startId: start?.id, endId: end?.id, model, quality: q, seconds: secs, aspect, audio })
+        ? await api.frames({ prompt: prompt.trim(), startId: start?.id, endId: end?.id, refIds: model === "pika-h3" ? refs : undefined, model, quality: q, seconds: secs, aspect, audio })
         : await api.t2v({ prompt: prompt.trim(), imageIds: refs, model: router!.id, quality: q, seconds: secs, aspect, audio });
       p.onTake(take);
       p.say("Started. It shows in History.");
@@ -349,8 +351,8 @@ function CreateForm(p: { images: CastCard[]; onNewImage: (c: CastCard) => void; 
           <Chips label="Length" value={secs} options={lengths} onChange={setSeconds} show={(x) => `${x}s`} />
           {(!frames || picked) && <Chips label="Aspect" value={aspect} options={Object.keys(T2V_ASPECTS) as T2vAspect[]} onChange={setAspect} />}
           <Chips label="Resolution" value={q} options={m.qualities} onChange={setQuality} />
-          {!picked && model === "h3" ? (
-            <span className="vp-audio on" title="MiniMax H3 always makes sound">Audio always on</span>
+          {!picked && (model === "h3" || model === "pika-h3") ? (
+            <span className="vp-audio on" title={`${m.label} always makes sound`}>Audio always on</span>
           ) : picked && !picked.outputs.includes("audio") ? null : (
             <button className={`vp-audio ${audio ? "on" : ""}`} onClick={() => setAudio((x) => !x)} aria-pressed={audio}>Audio {audio ? "on" : "off"}</button>
           )}
@@ -368,7 +370,7 @@ function CreateForm(p: { images: CastCard[]; onNewImage: (c: CastCard) => void; 
 /* ---------------------------------------------------------------- Extend Video */
 
 function ExtendForm(p: { clip: Clip | null; take: T2vTake | null; onClearTake: () => void; onPickVideo: () => void; say: (m: string) => void; onTake: (t: T2vTake) => void }) {
-  const [model, setModel] = useState<FrameModel>("seedance-2-5");
+  const [model, setModel] = useState<FrameModel>("pika-h3");
   const [picking, setPicking] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [seconds, setSeconds] = useState(5);
@@ -435,8 +437,8 @@ function ExtendForm(p: { clip: Clip | null; take: T2vTake | null; onClearTake: (
         <div className="vp-chips">
           <Chips label="Duration" value={secs} options={lengths} onChange={setSeconds} show={(x) => `${x}s`} />
           <Chips label="Quality" value={q} options={m.qualities} onChange={setQuality} />
-          {model === "h3" ? (
-            <span className="vp-audio on" title="MiniMax H3 always makes sound">Audio always on</span>
+          {model === "h3" || model === "pika-h3" ? (
+            <span className="vp-audio on" title={`${m.label} always makes sound`}>Audio always on</span>
           ) : (
             <button className={`vp-audio ${audio ? "on" : ""}`} onClick={() => setAudio((x) => !x)} aria-pressed={audio}>Audio {audio ? "on" : "off"}</button>
           )}

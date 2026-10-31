@@ -1,13 +1,15 @@
 // Video from a start frame and/or an end frame, as a ComfyUI workflow: load
 // the frames -> Seedance First-Last-Frame, Wan 3.0 Image to Video, MiniMax H3
 // First-Last-Frame or LTX 2.5 Image to Video -> Save Video. H3 and LTX 2.5
-// also run from the prompt alone, through their text-to-video nodes. Runs on Comfy Cloud or your own ComfyUI like every other workflow,
+// also run from the prompt alone, through their text-to-video nodes. Pika H3
+// Flex runs its own workflows (pika.ts), also from reference pictures. Runs on Comfy Cloud or your own ComfyUI like every other workflow,
 // and each take keeps its graph as <take>.workflow.json.
 
 import { writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { currentBackend } from "./backend.js";
 import { comfyClient, runGraph } from "./engines/comfy.js";
+import { pikaGraph } from "./pika.js";
 import { nearestRatio } from "./providers/schemaFill.js";
 import type { ProviderHooks } from "./providers/types.js";
 import { FRAME_MODELS, snapSeconds, type FrameModel } from "./shared.js";
@@ -25,6 +27,8 @@ export interface FramesInput {
   aspect: number;
   audio: boolean;
   seed?: number;
+  /** Pika H3 Flex: reference pictures, when there is no start frame */
+  refs?: string[];
 }
 
 export function framesGraph(i: FramesInput): { graph: Record<string, Node>; outId: string; files: { id: string; path: string }[] } {
@@ -33,6 +37,7 @@ export function framesGraph(i: FramesInput): { graph: Record<string, Node>; outI
   if (!i.startFrame && !i.endFrame && !m.text) throw new Error(`${m.label} needs a start or end frame`);
   // H3 and LTX 2.5 take an end frame only together with a start frame
   if (m.text && i.endFrame && !i.startFrame) throw new Error(`${m.label} needs a start frame to go with the end frame`);
+  if (i.model === "pika-h3") return pikaGraph({ ...i, seconds: snapSeconds(i.model, Math.min(m.max, Math.max(m.min, i.seconds))) });
   const graph: Record<string, Node> = {};
   const files: { id: string; path: string }[] = [];
   let n = 0;
@@ -129,13 +134,14 @@ export function framesGraph(i: FramesInput): { graph: Record<string, Node>; outI
 /** Run the graph on the current backend and save the video to outPath. */
 export async function runFrames(i: FramesInput, outPath: string, hooks: ProviderHooks): Promise<void> {
   const key = process.env.COMFY_API_KEY?.trim();
-  if (!key) throw new Error("Comfy API key missing: add COMFY_API_KEY to app/.env and restart");
+  const local = currentBackend().target === "custom";
+  // partner nodes always need the key; Pika's open-weights workflow only on Comfy Cloud
+  if (!key && (i.model !== "pika-h3" || !local)) throw new Error("Comfy API key missing: add COMFY_API_KEY to app/.env and restart");
   const { graph, outId, files } = framesGraph(i);
   await writeFile(outPath.replace(/\.mp4$/i, "") + ".workflow.json", JSON.stringify(graph, null, 2)).catch(() => {});
   const c = comfyClient();
   const wf = c.workflows.fromJson(structuredClone(graph));
   for (const f of files) wf.setInput(f.id, "image", c.assets.fromFile(f.path));
-  const local = currentBackend().target === "custom";
   console.log(`submit workflow ${FRAME_MODELS[i.model].label} frames on ${local ? currentBackend().url : "Comfy Cloud"}: ${files.length} frame(s)`);
   hooks.progress(0.1, files.length ? "Uploading frames" : "Sending the workflow");
   let p = 0.15;

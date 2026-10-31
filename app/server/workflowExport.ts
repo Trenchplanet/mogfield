@@ -6,6 +6,7 @@
 import { loadGraph } from "./engines/comfy.js";
 import { editPrompt, SHEET_PROMPT } from "./characters.js";
 import { framesGraph } from "./frames.js";
+import { PIKA_MAX_REFS } from "./pika.js";
 import { buildRefVideoPrompt } from "./pipeline.js";
 import { seedanceText } from "./providers/schemaFill.js";
 import { refVideoGraph } from "./providers/refVideo.js";
@@ -41,12 +42,13 @@ export interface ExportRequest {
 const placeholders = (n: number, name: string) => Array.from({ length: n }, (_, k) => `${name}-${k + 1}.png`);
 
 /** A whole-take tool on one model: Seedance, Wan 3.0 / MiniMax H3 reference video,
- *  the H3 swap workflow, or LTX 2.5 / H3 from text. */
+ *  the H3 swap workflow, Pika H3 Flex, or LTX 2.5 / H3 from text. */
 async function takeGraph(model: string, r: ExportRequest, prompt: string, seconds: number, aspect: number): Promise<Graph> {
   const image = (r.characters ?? 1) > 0 ? "character.png" : undefined;
   const quality = r.quality ?? "720p";
   if (model.startsWith("h3:")) return (await loadGraph("backlot_h3_swap")) as Graph;
   if (model.startsWith("comfyui:")) return (await loadGraph("backlot_recast")) as Graph;
+  if (model.startsWith("pika:")) return framesGraph({ model: "pika-h3", prompt, refs: image ? [image] : [], quality, seconds, aspect, audio: true }).graph as Graph;
   if (model.startsWith("refv:")) return refVideoGraph({ model: model.slice(5), prompt, video: "take.mp4", image, quality, seconds }).graph;
   if (/ltx-2-5-(fast|pro)/.test(model) || /minimax-h3$/.test(model)) {
     const id: FrameModel = model.includes("ltx-2-5-pro") ? "ltx-2-5-pro" : model.includes("ltx") ? "ltx-2-5-fast" : "h3";
@@ -67,7 +69,8 @@ export async function exportWorkflow(r: ExportRequest): Promise<{ name: string; 
     const m = FRAME_MODELS[frameModel];
     if (r.start || r.end || m.text || m.needsStart) {
       const start = r.start || m.needsStart ? "start-frame.png" : undefined;
-      return { name: "create", graph: framesGraph({ model: frameModel, prompt, startFrame: start, endFrame: r.end && (start || !m.text) ? "end-frame.png" : undefined, quality, seconds, aspect, audio: r.audio !== false }).graph };
+      const refs = frameModel === "pika-h3" && !start ? placeholders(Math.min(PIKA_MAX_REFS, r.refs ?? 0), "reference") : undefined;
+      return { name: "create", graph: framesGraph({ model: frameModel, prompt, startFrame: start, endFrame: r.end && (start || !m.text) ? "end-frame.png" : undefined, refs, quality, seconds, aspect, audio: r.audio !== false }).graph };
     }
     const images = placeholders(Math.min(4, r.refs ?? 0), "reference");
     const text = seedanceText({ prompt, imageUrls: images });

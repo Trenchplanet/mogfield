@@ -20,6 +20,7 @@ export const FEATURES: readonly { id: string; label: string; workflows: readonly
   { id: "seedance", label: "Seedance: Restyle, Re-shoot, Text to video, Create", workflows: [], nodes: ["ByteDance2ReferenceNodeV2", "ByteDance2TextToVideoNode", "LoadVideo", "LoadImage", "SaveVideo"] },
   { id: "depth", label: "Depth maps", workflows: ["backlot_depth"] },
   { id: "prep", label: "Genjustsu prep (depth, vocals, SAM 3)", workflows: ["backlot_genjustsu", "backlot_genjustsu_sam"] },
+  { id: "pika", label: "Pika H3 Flex (main video model)", workflows: ["backlot_pika_h3_t2v", "backlot_pika_h3_fl2va", "backlot_pika_h3_ref2va"] },
   { id: "h3", label: "H3 character swap", workflows: ["backlot_h3_swap"] },
   { id: "cast", label: "Character cards (FLUX 3)", workflows: ["backlot_cast"] },
   { id: "direct", label: "Direct (camera, lens, grade)", workflows: ["backlot_direct"] },

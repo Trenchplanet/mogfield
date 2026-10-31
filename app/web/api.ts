@@ -118,7 +118,7 @@ export const api = {
     fetch(`/api/renders/${renderId}/ab`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ overlay }) }).then((r) => j<{ url: string }>(r)),
   /** Text to video takes, newest first. */
   t2vTakes: () => fetch("/api/t2v").then((r) => j<T2vTake[]>(r)),
-  frames: (body: { prompt: string; startId?: string; endId?: string; model: FrameModel; quality: string; seconds: number; aspect: T2vAspect; audio: boolean }) =>
+  frames: (body: { prompt: string; startId?: string; endId?: string; refIds?: string[]; model: FrameModel; quality: string; seconds: number; aspect: T2vAspect; audio: boolean }) =>
     fetch("/api/frames", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => j<T2vTake>(r)),
   extend: (body: { clipId?: string; takeId?: string; from: number; prompt: string; model: FrameModel; quality: string; seconds: number; audio: boolean }) =>
     fetch("/api/extend", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => j<T2vTake>(r)),

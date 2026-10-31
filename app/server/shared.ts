@@ -135,11 +135,12 @@ const LTX_FAST_SECONDS = [2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20] as const;
 const LTX_PRO_SECONDS = [2, 3, 4, 5, 6, 8, 10] as const;
 
 /**
- * Models that start (and optionally end) on a given frame (H3 and LTX 2.5 also from a prompt alone): Create Video with a
+ * Models that start (and optionally end) on a given frame (Pika H3 Flex, H3 and LTX 2.5 also from a prompt alone): Create Video with a
  * start / end frame, and Extend Video, which starts on the take's last frame.
  * Prices follow the nodes' own price formulas on Comfy (no input video billed).
  */
 const FRAME_MODEL_LIST = {
+  "pika-h3": { label: "Pika H3 Flex", node: "Pika H3 Flex", qualities: ["480p", "768p"], min: 5, max: 15, needsStart: false, text: true },
   "seedance-2-5": { label: "Seedance 2.5", node: "Seedance 2.5", qualities: ["480p", "720p", "1080p"], min: 4, max: 30, needsStart: false },
   "seedance-2-0": { label: "Seedance 2.0", node: "Seedance 2.0", qualities: ["480p", "720p", "1080p"], min: 4, max: 15, needsStart: false },
   "seedance-2-0-fast": { label: "Seedance 2.0 Fast", node: "Seedance 2.0 Fast", qualities: ["480p", "720p"], min: 4, max: 15, needsStart: false },
@@ -166,6 +167,8 @@ export function snapSeconds(model: FrameModel, seconds: number): number {
 
 export function frameModelUsd(model: FrameModel, quality: string, seconds: number): number {
   const d = seconds;
+  // open weights in a ComfyUI workflow: no partner-node price (Comfy Cloud bills its GPU time)
+  if (model === "pika-h3") return 0;
   if (model === "seedance-2-5") {
     const perFrame = quality === "480p" ? 400.3125 : quality === "1080p" ? 2025 : 900;
     return (Math.floor(perFrame * (24 * d + 1)) / 1000) * (quality === "1080p" ? 0.016731 : 0.015301);

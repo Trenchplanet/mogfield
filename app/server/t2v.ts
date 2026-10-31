@@ -65,16 +65,16 @@ const media = (file: string) => `/media/renders/${file}`;
 const workflowOf = (outPath: string, file: string) => (existsSync(outPath.replace(/\.mp4$/, ".workflow.json")) ? media(file.replace(/\.mp4$/, ".workflow.json")) : undefined);
 
 /** A video that starts on a start frame and/or lands on an end frame. */
-export function startFramesTake(o: { prompt: string; model: FrameModel; quality: string; seconds: number; aspect: T2vAspect; audio: boolean; start?: { id: string; path: string }; end?: { id: string; path: string } }): T2vTake {
+export function startFramesTake(o: { prompt: string; model: FrameModel; quality: string; seconds: number; aspect: T2vAspect; audio: boolean; start?: { id: string; path: string }; end?: { id: string; path: string }; refs?: { id: string; path: string }[] }): T2vTake {
   const id = randomUUID().slice(0, 8);
   const take: T2vTake = {
-    id, kind: "frames", prompt: o.prompt, imageIds: [], startFrameId: o.start?.id, endFrameId: o.end?.id, model: o.model, quality: o.quality, seconds: o.seconds, aspect: o.aspect, audio: o.audio,
+    id, kind: "frames", prompt: o.prompt, imageIds: (o.refs ?? []).map((r) => r.id), startFrameId: o.start?.id, endFrameId: o.end?.id, model: o.model, quality: o.quality, seconds: o.seconds, aspect: o.aspect, audio: o.audio,
     status: "running", progress: 0, message: "Starting", createdAt: Date.now(),
   };
   const file = `frames-${id}.mp4`;
   const outPath = join(RENDER_DIR, file);
   return run(take, async (hooks) => {
-    await runFrames({ model: o.model, prompt: o.prompt, startFrame: o.start?.path, endFrame: o.end?.path, quality: o.quality, seconds: o.seconds, aspect: T2V_ASPECTS[o.aspect], audio: o.audio }, outPath, hooks);
+    await runFrames({ model: o.model, prompt: o.prompt, startFrame: o.start?.path, endFrame: o.end?.path, refs: o.refs?.map((r) => r.path), quality: o.quality, seconds: o.seconds, aspect: T2V_ASPECTS[o.aspect], audio: o.audio }, outPath, hooks);
     return { url: media(file), workflowUrl: workflowOf(outPath, file) };
   });
 }
