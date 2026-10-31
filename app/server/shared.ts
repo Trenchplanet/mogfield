@@ -517,13 +517,25 @@ export interface AgentMessage {
   at: number;
 }
 
+/** A director project's own workflow: what every storyboard in it starts from. */
+export interface AgentSettings {
+  model: FrameModel;
+  quality: string;
+  aspect: T2vAspect;
+  audio: boolean;
+}
+
 export interface AgentProject {
   id: string;
   title: string;
+  /** named by the user: a storyboard's title no longer renames the project */
+  named?: boolean;
+  /** the project's workflow (absent on projects from before projects had settings) */
+  settings?: AgentSettings;
   stage: AgentStage;
   messages: AgentMessage[];
   board?: AgentBoard;
-  /** library pictures the user attached as cast */
+  /** the project's own characters: library pictures or pictures uploaded into this project */
   castIds: string[];
   thinking?: boolean;
   film?: { status: "running" | "succeeded" | "failed"; url?: string; error?: string };

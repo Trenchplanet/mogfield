@@ -29,15 +29,18 @@ export interface FramesInput {
   seed?: number;
   /** Pika H3 Flex: reference pictures, when there is no start frame */
   refs?: string[];
+  /** Pika H3 Flex: the take as a reference video, fitted to H3's grid */
+  refVideo?: { path: string; audio: boolean };
 }
 
-export function framesGraph(i: FramesInput): { graph: Record<string, Node>; outId: string; files: { id: string; path: string }[] } {
+export function framesGraph(i: FramesInput): { graph: Record<string, Node>; outId: string; files: { id: string; field?: string; path: string }[] } {
   const m = FRAME_MODELS[i.model];
   if (m.needsStart && !i.startFrame) throw new Error(`${m.label} needs a start frame`);
   if (!i.startFrame && !i.endFrame && !m.text) throw new Error(`${m.label} needs a start or end frame`);
   // H3 and LTX 2.5 take an end frame only together with a start frame
   if (m.text && i.endFrame && !i.startFrame) throw new Error(`${m.label} needs a start frame to go with the end frame`);
-  if (i.model === "pika-h3") return pikaGraph({ ...i, seconds: snapSeconds(i.model, Math.min(m.max, Math.max(m.min, i.seconds))) });
+  // with the take as a reference the output matches the take's own length
+  if (i.model === "pika-h3") return pikaGraph({ ...i, seconds: i.refVideo ? i.seconds : snapSeconds(i.model, Math.min(m.max, Math.max(m.min, i.seconds))) });
   const graph: Record<string, Node> = {};
   const files: { id: string; path: string }[] = [];
   let n = 0;
@@ -142,7 +145,7 @@ export async function runFrames(i: FramesInput, outPath: string, hooks: Provider
   await writeFile(outPath.replace(/\.mp4$/i, "") + ".workflow.json", JSON.stringify(graph, null, 2)).catch(() => {});
   const c = comfyClient();
   const wf = c.workflows.fromJson(structuredClone(graph));
-  for (const f of files) wf.setInput(f.id, "image", c.assets.fromFile(f.path));
+  for (const f of files) wf.setInput(f.id, f.field ?? "image", c.assets.fromFile(f.path));
   console.log(`submit workflow ${FRAME_MODELS[i.model].label} frames on ${local ? currentBackend().url : "Comfy Cloud"}: ${files.length} frame(s)`);
   hooks.progress(0.1, files.length ? "Uploading frames" : "Sending the workflow");
   let p = 0.15;

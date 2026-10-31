@@ -1,12 +1,14 @@
 import type { BackendStatus } from "../server/backend";
 import type { ExportRequest } from "../server/workflowExport";
-import type { AgentProject, AgentShot, FrameModel, T2vAspect, T2vTake } from "../server/shared";
+import type { AgentProject, AgentSettings, AgentShot, FrameModel, T2vAspect, T2vTake } from "../server/shared";
 import type { CastCard, Clip, DepthJob, PersonBox, Preparation, PromptPack, Render, RenderEvent, RenderParams } from "../server/shared";
 
-export type AgentSummary = { id: string; title: string; stage: AgentProject["stage"]; updatedAt: number; thumb?: string };
+export type AgentSummary = { id: string; title: string; stage: AgentProject["stage"]; updatedAt: number; model: FrameModel; cast: number; thumb?: string };
 export type AgentShotView = AgentShot & { take?: { status: T2vTake["status"]; progress: number; message: string; url?: string; error?: string } };
 export type AgentView = Omit<AgentProject, "board"> & {
   board?: Omit<NonNullable<AgentProject["board"]>, "shots"> & { shots: AgentShotView[] };
+  settings: AgentSettings;
+  cast: { id: string; url: string; prompt: string }[];
   quote: { frames: number; shots: number };
   director: string;
 };
@@ -137,7 +139,9 @@ export const api = {
   },
   /** Agent mode (experimental): projects with a director, a storyboard and approvals. */
   agentList: () => fetch("/api/agent").then((r) => j<AgentSummary[]>(r)),
-  agentNew: () => fetch("/api/agent", { method: "POST" }).then((r) => j<AgentView>(r)),
+  agentNew: (body: { title?: string; castIds?: string[] } & Partial<AgentSettings> = {}) => agentPost("/api/agent", body),
+  agentUpdate: (id: string, patch: { title?: string; castIds?: string[]; settings?: Partial<AgentSettings> }) =>
+    fetch(`/api/agent/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<AgentView>(r)),
   agentGet: (id: string) => fetch(`/api/agent/${id}`).then((r) => j<AgentView>(r)),
   agentDelete: (id: string) => fetch(`/api/agent/${id}`, { method: "DELETE" }).then((r) => j<{ ok: boolean }>(r)),
   agentSay: (id: string, text: string, castIds: string[]) => agentPost(`/api/agent/${id}/message`, { text, castIds }),

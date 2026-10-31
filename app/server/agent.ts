@@ -13,12 +13,14 @@ import { writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { Hono } from "hono";
 import { comfy } from "@comfyorg/sdk";
+import { currentBackend } from "./backend.js";
 import { storyboardFrame } from "./characters.js";
+import { framesGraph } from "./frames.js";
 import { DATA_DIR, RENDER_DIR } from "./config.js";
 import { concatShots } from "./media.js";
 import {
   AGENT_FRAME_USD, FRAME_MODELS, T2V_ASPECTS, frameModelUsd, snapSeconds,
-  type AgentBoard, type AgentProject, type AgentShot, type FrameModel, type T2vAspect,
+  type AgentBoard, type AgentProject, type AgentSettings, type AgentShot, type FrameModel, type T2vAspect,
 } from "./shared.js";
 import { listTakes, startFramesTake } from "./t2v.js";
 
@@ -26,7 +28,7 @@ export const AGENT_MODEL = process.env.MOGFIELD_AGENT_MODEL?.trim() || "anthropi
 const FILE = join(DATA_DIR, "agent.json");
 const MAX_SHOTS = 12;
 
-type CastLookup = (id: string) => { path: string; prompt: string } | undefined;
+type CastLookup = (id: string) => { path: string; prompt: string; url: string } | undefined;
 
 const projects = new OwnedMap<AgentProject>();
 (() => {
@@ -44,6 +46,13 @@ const projects = new OwnedMap<AgentProject>();
     /* unreadable: start empty */
   }
 })();
+/** A new project's workflow: Pika H3 Flex on your own ComfyUI (LOCAL), else Seedance 2.0 Fast. */
+export function defaultSettings(): AgentSettings {
+  const local = currentBackend().target === "custom";
+  return { model: local ? "pika-h3" : "seedance-2-0-fast", quality: "480p", aspect: "9:16", audio: true };
+}
+const settingsOf = (p: AgentProject) => p.settings ?? defaultSettings();
+
 const save = () => writeFile(FILE, JSON.stringify(projects.all(), null, 2)).catch(() => {});
 onPurged(() => void save());
 const touch = (p: AgentProject) => {
@@ -87,7 +96,7 @@ Writing the prompts:
 - Repeat each character's look (face, hair, age, wardrobe) word for word in every prompt they appear in, and repeat the style, so every shot looks like the same film.
 - Real people: only by the user's own pictures (the cast). Never name or imitate celebrities. No logos, no on-screen text unless asked.
 
-Video models (pick one for the whole film; default "seedance-2-0-fast" at 480p for a cheap first cut unless the user wants quality; "pika-h3" only runs when the user's ComfyUI is set to LOCAL; every shot's seconds must fit the model):
+Video models (one for the whole film; use the project's model, quality, shape and sound given with each message unless the user asks for something else; "pika-h3" only runs when the user's ComfyUI is set to LOCAL; every shot's seconds must fit the model):
 ${MODEL_NOTES}
 Aspect ratios: ${Object.keys(T2V_ASPECTS).join(", ")} (default 9:16 for social, 16:9 or 21:9 for cinematic).
 
@@ -120,13 +129,13 @@ function parseAnswer(text: string): DirectorAnswer {
 const str = (v: unknown, max = 600) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 /** The director's storyboard, made safe: known model, lengths the model can make, at most 12 shots; unchanged shots keep their frames. */
-function cleanBoard(raw: unknown, castIds: string[], prev?: AgentBoard): AgentBoard | undefined {
+function cleanBoard(raw: unknown, castIds: string[], prev: AgentBoard | undefined, settings: AgentSettings): AgentBoard | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const r = raw as Record<string, unknown>;
-  const model: FrameModel = typeof r.model === "string" && r.model in FRAME_MODELS ? (r.model as FrameModel) : prev?.model ?? "seedance-2-0-fast";
+  const model: FrameModel = typeof r.model === "string" && r.model in FRAME_MODELS ? (r.model as FrameModel) : prev?.model ?? settings.model;
   const m = FRAME_MODELS[model];
-  const quality = typeof r.quality === "string" && m.qualities.includes(r.quality) ? r.quality : m.qualities[0];
-  const aspect: T2vAspect = typeof r.aspect === "string" && r.aspect in T2V_ASPECTS ? (r.aspect as T2vAspect) : prev?.aspect ?? "9:16";
+  const quality = typeof r.quality === "string" && m.qualities.includes(r.quality) ? r.quality : m.qualities.includes(settings.quality) ? settings.quality : m.qualities[0];
+  const aspect: T2vAspect = typeof r.aspect === "string" && r.aspect in T2V_ASPECTS ? (r.aspect as T2vAspect) : prev?.aspect ?? settings.aspect;
   const cast = (v: unknown) => (Array.isArray(v) ? v.map((n) => castIds[Number(n) - 1]).filter((x): x is string => !!x) : []);
   const shots: AgentShot[] = (Array.isArray(r.shots) ? r.shots : []).slice(0, MAX_SHOTS).map((x) => {
     const s = (x ?? {}) as Record<string, unknown>;
@@ -151,14 +160,16 @@ function cleanBoard(raw: unknown, castIds: string[], prev?: AgentBoard): AgentBo
   });
   return {
     title: str(r.title, 80) || "Untitled", logline: str(r.logline, 300), style: str(r.style, 400),
-    aspect, model, quality, audio: r.audio !== false, characters, shots,
+    aspect, model, quality, audio: typeof r.audio === "boolean" ? r.audio : prev?.audio ?? settings.audio, characters, shots,
   };
 }
 
 async function direct(p: AgentProject, lookup: CastLookup) {
   const cast = p.castIds.map((id, i) => `${i + 1}. ${lookup(id)?.prompt ?? "a picture"}`).join("\n");
+  const s = settingsOf(p);
   const context = [
-    p.castIds.length ? `Attached cast pictures:\n${cast}` : "No cast pictures attached.",
+    `Project: ${p.title}. Project workflow: model "${s.model}", quality ${s.quality}, aspect ${s.aspect}, sound ${s.audio ? "on" : "off"}.`,
+    p.castIds.length ? `The project's cast pictures:\n${cast}` : "No cast pictures in this project.",
     p.board ? `Current storyboard (JSON):\n${JSON.stringify({ ...p.board, shots: p.board.shots.map(({ frame, frameApproved, takeId, id, ...s }) => ({ ...s, cast: s.cast.map((c) => p.castIds.indexOf(c) + 1) })) })}` : "No storyboard yet.",
     `Stage: ${p.stage}.`,
   ].join("\n\n");
@@ -172,10 +183,11 @@ async function direct(p: AgentProject, lookup: CastLookup) {
   if (data.stop_reason === "max_tokens") throw new Error("the storyboard ran too long to finish; ask for fewer shots or shorter prompts");
   const text = (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("");
   const answer = parseAnswer(text);
-  const board = cleanBoard(answer.storyboard, p.castIds, p.board);
+  const board = cleanBoard(answer.storyboard, p.castIds, p.board, s);
   if (board) {
     p.board = board;
-    p.title = board.title;
+    if (!p.named) p.title = board.title;
+    p.settings = { model: board.model, quality: board.quality, aspect: board.aspect, audio: board.audio };
     // a changed storyboard goes back for approval; drawn frames that still match are kept
     p.stage = "board";
     p.film = undefined;
@@ -288,18 +300,58 @@ function quote(p: AgentProject) {
   };
 }
 
+/** The whole project as one ComfyUI graph (API format): every shot's workflow side by
+ *  side, shot n's nodes numbered n*1000+, starting on that shot's key frame. */
+export function projectGraph(p: AgentProject) {
+  const b = p.board;
+  if (!b) return null;
+  const graph: Record<string, { class_type: string; inputs: Record<string, unknown>; _meta: { title: string } }> = {};
+  b.shots.forEach((s, i) => {
+    const n = i + 1;
+    const { graph: g } = framesGraph({ model: b.model, prompt: videoPrompt(b, s), startFrame: framePath(p, s), quality: b.quality, seconds: s.seconds, aspect: T2V_ASPECTS[b.aspect], audio: b.audio });
+    const id = (x: string) => String(n * 1000 + Number(x));
+    for (const [k, node] of Object.entries(g)) {
+      const inputs = Object.fromEntries(Object.entries(node.inputs).map(([f, v]) => [f, Array.isArray(v) && v.length === 2 && typeof v[0] === "string" ? [id(v[0]), v[1]] : v]));
+      if (node.class_type === "SaveVideo") inputs.filename_prefix = `mogfield/${p.id}/shot-${n}`;
+      graph[id(k)] = { class_type: node.class_type, inputs, _meta: { title: `Shot ${n} · ${node._meta.title}` } };
+    }
+  });
+  return graph;
+}
+
 /* ------------------------------------------------------------------ routes */
 
 export function agentRoutes(app: Hono, lookup: CastLookup) {
-  const view = (p: AgentProject) => ({ ...withTakes(p), quote: quote(p), director: AGENT_MODEL });
+  const view = (p: AgentProject) => ({
+    ...withTakes(p),
+    settings: settingsOf(p),
+    // the project's characters with their pictures, including ones uploaded only into this project
+    cast: p.castIds.map((id) => lookup(id)).map((c, i) => c && { id: p.castIds[i], url: c.url, prompt: c.prompt }).filter((c): c is { id: string; url: string; prompt: string } => !!c),
+    quote: quote(p),
+    director: AGENT_MODEL,
+  });
+  const cleanSettings = (b: Record<string, unknown>, base: AgentSettings): AgentSettings => {
+    const model = typeof b.model === "string" && b.model in FRAME_MODELS ? (b.model as FrameModel) : base.model;
+    const qualities = FRAME_MODELS[model].qualities;
+    const quality = typeof b.quality === "string" && qualities.includes(b.quality) ? b.quality : qualities.includes(base.quality) ? base.quality : qualities[0];
+    const aspect = typeof b.aspect === "string" && b.aspect in T2V_ASPECTS ? (b.aspect as T2vAspect) : base.aspect;
+    return { model, quality, aspect, audio: typeof b.audio === "boolean" ? b.audio : base.audio };
+  };
   const need = (id: string) => projects.get(id);
   const hasKey = () => !!process.env.COMFY_API_KEY?.trim();
 
-  app.get("/api/agent", (c) => c.json([...projects.values()].sort((a, b) => b.updatedAt - a.updatedAt).map((p) => ({ id: p.id, title: p.title, stage: p.stage, updatedAt: p.updatedAt, thumb: p.board?.shots.find((s) => s.frame?.url)?.frame?.url }))));
+  app.get("/api/agent", (c) => c.json([...projects.values()].sort((a, b) => b.updatedAt - a.updatedAt).map((p) => ({ id: p.id, title: p.title, stage: p.stage, updatedAt: p.updatedAt, model: settingsOf(p).model, cast: p.castIds.length, thumb: p.board?.shots.find((s) => s.frame?.url)?.frame?.url }))));
 
+  // a new project: its own name, workflow and cast
   app.post("/api/agent", async (c) => {
     const now = Date.now();
-    const p: AgentProject = { id: randomUUID().slice(0, 8), title: "New film", stage: "brief", messages: [], castIds: [], createdAt: now, updatedAt: now };
+    const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const title = str(b.title, 80);
+    const p: AgentProject = {
+      id: randomUUID().slice(0, 8), title: title || "New film", named: !!title, stage: "brief", messages: [],
+      castIds: Array.isArray(b.castIds) ? b.castIds.filter((x): x is string => typeof x === "string" && !!lookup(x)).slice(0, 12) : [],
+      settings: cleanSettings(b, defaultSettings()), createdAt: now, updatedAt: now,
+    };
     projects.set(p.id, p);
     touch(p);
     return c.json(view(p));
@@ -308,6 +360,28 @@ export function agentRoutes(app: Hono, lookup: CastLookup) {
   app.get("/api/agent/:id", (c) => {
     const p = need(c.req.param("id"));
     return p ? c.json(view(p)) : c.json({ error: "no such project" }, 404);
+  });
+
+  // rename, set the project's cast, or change its workflow
+  app.patch("/api/agent/:id", async (c) => {
+    const p = need(c.req.param("id"));
+    if (!p) return c.json({ error: "no such project" }, 404);
+    const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const title = str(b.title, 80);
+    if (title) Object.assign(p, { title, named: true });
+    if (Array.isArray(b.castIds)) p.castIds = b.castIds.filter((x): x is string => typeof x === "string" && !!lookup(x)).slice(0, 12);
+    if (b.settings && typeof b.settings === "object") p.settings = cleanSettings(b.settings as Record<string, unknown>, settingsOf(p));
+    touch(p);
+    return c.json(view(p));
+  });
+
+  // the project as one ComfyUI workflow, every shot starting on its key frame
+  app.get("/api/agent/:id/workflow", (c) => {
+    const p = need(c.req.param("id"));
+    const graph = p && projectGraph(p);
+    if (!p || !graph) return c.json({ error: "no storyboard yet" }, 404);
+    const name = `${p.title.replace(/[^\w -]+/g, "").trim().replace(/\s+/g, "-") || "project"}.workflow.json`;
+    return c.body(JSON.stringify(graph, null, 2), 200, { "content-type": "application/json", "content-disposition": `attachment; filename="${name}"` });
   });
 
   app.delete("/api/agent/:id", (c) => {
@@ -358,6 +432,8 @@ export function agentRoutes(app: Hono, lookup: CastLookup) {
       if (p.stage !== "brief") p.stage = "board";
     }
     if (typeof b.audio === "boolean") board.audio = b.audio;
+    // the storyboard's settings are the project's workflow from now on
+    p.settings = { model: board.model, quality: board.quality, aspect: board.aspect, audio: board.audio };
     const s = board.shots.find((x) => x.id === b.shot?.id);
     if (s && b.shot) {
       if (typeof b.shot.seconds === "number") s.seconds = snapSeconds(board.model, Math.min(FRAME_MODELS[board.model].max, Math.max(FRAME_MODELS[board.model].min, b.shot.seconds)));

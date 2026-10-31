@@ -3,7 +3,8 @@
 //
 //   workflows/backlot_pika_h3_t2v.json     the prompt alone
 //   workflows/backlot_pika_h3_fl2va.json   a start frame, optionally an end frame
-//   workflows/backlot_pika_h3_ref2va.json  up to 9 reference pictures
+//   workflows/backlot_pika_h3_ref2va.json  up to 9 reference pictures and/or the take
+//                                          as a reference video (Re-shoot, swap, Genjutsu)
 //
 // Comfy Cloud does not serve it, so it runs on your own ComfyUI (LOCAL) only,
 // with the model files listed in workflows/README.md installed there.
@@ -30,9 +31,12 @@ export function pikaGraph(i: {
   endFrame?: string;
   /** reference pictures, used when there is no start frame */
   refs?: string[];
-}): { graph: Record<string, Node>; outId: string; files: { id: string; path: string }[] } {
+  /** the take as <Video 1>, already fitted to the size and length (fitTake); its sound goes in too */
+  refVideo?: { path: string; audio: boolean };
+}): { graph: Record<string, Node>; outId: string; files: { id: string; field: string; path: string }[] } {
   const refs = i.startFrame ? [] : (i.refs ?? []).slice(0, PIKA_MAX_REFS);
-  const kind = i.startFrame ? "fl2va" : refs.length ? "ref2va" : "t2v";
+  const refVideo = i.startFrame ? undefined : i.refVideo;
+  const kind = i.startFrame ? "fl2va" : refs.length || refVideo ? "ref2va" : "t2v";
   const name = `backlot_pika_h3_${kind}`;
   const graph = JSON.parse(readFileSync(workflowPath(name), "utf8")) as Record<string, Node>;
   const one = (title: string) => {
@@ -40,14 +44,14 @@ export function pikaGraph(i: {
     if (!id) throw new Error(`workflows/${name}.json is missing the node titled ${title}`);
     return id;
   };
-  const files: { id: string; path: string }[] = [];
+  const files: { id: string; field: string; path: string }[] = [];
   const h3 = graph[one("BL:h3")].inputs;
   Object.assign(h3, { prompt: i.prompt, length: h3Frames(Math.min(15, i.seconds)), ...h3Size(i.aspect, i.quality) });
   graph[one("BL:seed")].inputs.noise_seed = i.seed ?? Math.floor(Math.random() * 2 ** 31);
 
   const image = (id: string, path: string) => {
     graph[id].inputs.image = basename(path);
-    files.push({ id, path });
+    files.push({ id, field: "image", path });
   };
   if (kind === "fl2va") {
     image(one("BL:start-frame"), i.startFrame!);
@@ -63,12 +67,23 @@ export function pikaGraph(i: {
     delete graph[one("BL:cast-2")];
     for (const k of Object.keys(h3)) if (k.startsWith("ref_images.")) delete h3[k];
     let next = Math.max(...Object.keys(graph).map(Number)) + 1;
+    if (!refs.length) delete graph[first];
     refs.forEach((path, k) => {
       const id = k === 0 ? first : String(next++);
       if (k > 0) graph[id] = { class_type: "LoadImage", inputs: {}, _meta: { title: `BL:cast-${k + 1}` } };
       image(id, path);
       h3[`ref_images.ref_image_${k}`] = [id, 0];
     });
+    // the take: frames as <Video 1>, its sound as that video's audio (mouth movement, timing)
+    if (refVideo) {
+      const video = String(next++);
+      const parts = String(next++);
+      graph[video] = { class_type: "LoadVideo", inputs: { file: basename(refVideo.path) }, _meta: { title: "BL:video" } };
+      graph[parts] = { class_type: "GetVideoComponents", inputs: { video: [video, 0] }, _meta: { title: "BL:video-parts" } };
+      files.push({ id: video, field: "file", path: refVideo.path });
+      h3["ref_videos.ref_video_0"] = [parts, 0];
+      if (refVideo.audio) h3["ref_video_audios.ref_video_audio_0"] = [parts, 1];
+    }
   }
   return { graph, outId: one("BL:output"), files };
 }

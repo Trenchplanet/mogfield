@@ -23,6 +23,7 @@ import { catalogModel, catalogModels, runCatalogModel } from "./providers/catalo
 import { downloadLink } from "./links.js";
 import { checkBackend, currentBackend, loadBackend, saveBackend, type Backend } from "./backend.js";
 import { PIKA_MAX_REFS } from "./pika.js";
+import { downloadScript } from "./models.js";
 import { isFrameModel, listTakes, startExtend, startFramesTake, startTake } from "./t2v.js";
 
 // the backend picked in the app (data/backend.json) wins over the .env default
@@ -808,18 +809,19 @@ app.post("/api/renders", async (c) => {
     return c.json({ error: "Prepare the clip, review the full mask and prepared input, and approve the exact artifacts before generating." }, 409);
   if (needsPreparation && preparation && (preparation.clipId !== params.clipId || !sameTrim(preparation.trim, params.trim)))
     return c.json({ error: "This approved preparation belongs to a different clip or trim. Prepare and review the current take." }, 409);
-  // H3 character swap may also use an approved preparation (the SAM 3 silhouette take) instead of the raw video
-  const optionalPreparation = params.mode === "recast" && target?.provider.id === "h3";
+  // H3 and Pika H3 Flex character swap may also use an approved preparation (the SAM 3 silhouette take) instead of the raw video
+  const swap = target?.provider.id === "h3" || (target?.provider.id === "pika" && target.model === "h3-flex-swap");
+  const optionalPreparation = params.mode === "recast" && swap;
   if (optionalPreparation && params.preparationId && (!preparation?.approved || !preparation.result || preparation.clipId !== params.clipId || !sameTrim(preparation.trim, params.trim)))
     return c.json({ error: "That preparation is not approved for this clip and trim." }, 409);
   if (!needsPreparation && !optionalPreparation && params.preparationId)
-    return c.json({ error: "Genjustsu preparations can only be used with Comfy Seedance 2.5 or H3 character swap." }, 400);
+    return c.json({ error: "Genjustsu preparations can only be used with Comfy Seedance 2.5, H3 character swap or Pika H3 Flex character swap." }, 400);
   const capped = consumeRenderCap(c);
   if (capped) return c.json({ error: capped }, 429);
   const id = randomUUID().slice(0, 8);
   const r: Render = {
     id, params, status: "queued", progress: 0, message: "Queued", engine: ENGINE, createdAt: Date.now(), take: ++takeCounter,
-    ...(target?.provider.id === "comfy" ? { steps: makeSteps(SEEDANCE_STEPS) } : target?.provider.id === "h3" ? { steps: makeSteps(H3_STEPS) } : target?.provider.id === "refv" ? { steps: makeSteps(REFV_STEPS) } : {}),
+    ...(target?.provider.id === "comfy" ? { steps: makeSteps(SEEDANCE_STEPS) } : swap ? { steps: makeSteps(H3_STEPS) } : target?.provider.id === "refv" || target?.provider.id === "pika" ? { steps: makeSteps(REFV_STEPS) } : {}),
   };
   renders.set(id, r);
   saveLibrary(); // a queued take survives a restart (as interrupted) and shows in the queue
@@ -1250,6 +1252,13 @@ app.post("/api/extend", async (c) => {
 // Where workflows run. GET checks the current choice; POST with test: true only
 // checks the given one, without it the choice is saved and applied.
 app.get("/api/backend", async (c) => c.json(await checkBackend(currentBackend())));
+// every model file the current ComfyUI lacks, as one script that fetches them from Hugging Face
+app.get("/api/backend/models.sh", async (c) => {
+  const status = await checkBackend(currentBackend());
+  if (!status.connected) return c.json({ error: `Not connected: ${status.error}` }, 409);
+  const only = c.req.query("features")?.split(",").filter(Boolean);
+  return c.body(downloadScript(status, only), 200, { "content-type": "text/x-shellscript; charset=utf-8", "content-disposition": 'attachment; filename="mogfield-models.sh"' });
+});
 app.post("/api/backend", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { target?: unknown; url?: unknown; test?: unknown };
   const target = body.target === "custom" ? "custom" : "cloud";

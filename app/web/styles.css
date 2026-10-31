@@ -1245,6 +1245,19 @@ button.lp-tile:hover:not(:disabled) { background: var(--card); }
 .exp-tag { margin-left: 4px; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #ffd60a; vertical-align: super; }
 .ag-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 6px; }
 .ag-head select { flex: 1; min-width: 0; background: var(--card); color: var(--text); border: 0; border-radius: 12px; padding: 9px 10px; font: inherit; font-weight: 600; }
+.be-download { display: grid; gap: 6px; margin: 8px 0; }
+.be-download .btn { justify-self: start; text-decoration: none; }
+.be-download code { font-size: 12px; }
+.ag-icon { flex: 0 0 auto; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--card); color: var(--text); font-size: 15px; text-decoration: none; }
+.ag-rename { flex: 1; min-width: 0; background: var(--card); color: var(--text); border: 0; border-radius: 12px; padding: 9px 10px; font: inherit; font-weight: 600; }
+.ag-new { display: grid; gap: 6px; margin: 0 12px 8px; padding: 12px; border-radius: 14px; background: var(--card); }
+.ag-new small { color: var(--text-2); }
+.ag-new-row { display: flex; gap: 6px; }
+.ag-new-row input { flex: 1; min-width: 0; background: var(--card-2); color: var(--text); border: 0; border-radius: 10px; padding: 9px 10px; font: inherit; }
+.ag-new-row button { padding: 0 14px; border-radius: 10px; background: var(--blue); color: #fff; font-weight: 600; }
+.ag-project-settings { padding: 0 12px 8px; }
+.ag-cast-pick .ag-cast-add { display: grid; place-items: center; font-size: 22px; color: var(--text-2); border-style: dashed; border-color: var(--card-2); }
+.ag-cast-sep { grid-column: 1 / -1; margin: 2px 0 0; }
 .ag-badge { flex: 0 0 auto; padding: 4px 9px; border-radius: 999px; background: rgba(255,214,10,.14); color: #ffd60a; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
 .ag-log { gap: 10px; }
 .ag-hero { background: linear-gradient(160deg, rgba(255,214,10,.16), rgba(255,214,10,.03) 70%), var(--card); }

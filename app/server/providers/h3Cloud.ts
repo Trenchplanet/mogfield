@@ -1,10 +1,11 @@
-// MiniMax H3 character swap on Comfy Cloud (workflows/backlot_h3_swap.json):
-// the take as <Video 1>, the character as <Picture 1>, an optional character
-// swap LoRA on the Ref2VA model. No depth, motion or SAM preparation.
+// MiniMax H3 character swap (workflows/backlot_h3_swap.json) on Comfy Cloud or
+// your own ComfyUI (LOCAL): the take as <Video 1>, the character as <Picture 1>,
+// an optional character swap LoRA on the Ref2VA model. No depth, motion or SAM preparation.
 
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { currentBackend, objectInfo } from "../backend.js";
 import { comfyClient, findByTitle, loadGraph } from "../engines/comfy.js";
 import { exec, probe } from "../media.js";
 import { H3_DEFAULT_LORA, H3_LORAS } from "../shared.js";
@@ -12,18 +13,27 @@ import type { GenerateJob, ModelOption, Provider, ProviderHooks } from "./types.
 
 const FPS = 24;
 const hasKey = () => !!process.env.COMFY_API_KEY?.trim();
+const local = () => currentBackend().target === "custom";
 
-// The account's LoRA list from Comfy Cloud, so an imported LoRA shows as installed.
-let loraList: { at: number; names: string[] } | null = null;
+// The target's LoRA list (Comfy Cloud or your own ComfyUI), so an imported LoRA shows as installed.
+let loraList: { at: number; target: string; names: string[] } | null = null;
 async function accountLoras(): Promise<string[]> {
-  if (loraList && Date.now() - loraList.at < 5 * 60_000) return loraList.names;
-  const res = await fetch("https://cloud.comfy.org/api/object_info", { headers: { "X-API-Key": process.env.COMFY_API_KEY!.trim() }, signal: AbortSignal.timeout(30_000) });
-  if (!res.ok) throw new Error(`Comfy Cloud answered HTTP ${res.status}`);
-  const info = (await res.json()) as Record<string, { input: { required: { lora_name: [unknown, { options?: string[] }?] } } }>;
-  const field = info.LoraLoaderModelOnly?.input.required.lora_name;
+  const target = currentBackend().url ?? "cloud";
+  if (loraList && loraList.target === target && Date.now() - loraList.at < 5 * 60_000) return loraList.names;
+  const info = await objectInfo();
+  const field = info.LoraLoaderModelOnly?.input?.required?.lora_name as [unknown, { options?: string[] }?] | undefined;
   const names = (Array.isArray(field?.[0]) ? (field[0] as string[]) : field?.[1]?.options) ?? [];
-  loraList = { at: Date.now(), names };
+  loraList = { at: Date.now(), target, names };
   return names;
+}
+
+/** The take at 24 fps, cropped to width x height and cut to `length` frames, as H3's reference video. */
+export async function fitTake(clipPath: string, out: string, width: number, height: number, length: number) {
+  await exec("ffmpeg", [
+    "-y", "-v", "error", "-i", clipPath, "-t", String(length / FPS),
+    "-vf", `fps=${FPS},scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=yuv420p`,
+    "-c:v", "libx264", "-preset", "fast", "-crf", "16", "-c:a", "aac", "-movflags", "+faststart", out,
+  ]);
 }
 
 /** The account's file for a LoRA, wherever it was imported to. */
@@ -45,24 +55,24 @@ export function h3Size(aspect: number, quality: string) {
 
 export const h3Cloud: Provider = {
   id: "h3",
-  label: "MiniMax H3 (Comfy Cloud)",
+  label: "MiniMax H3",
 
   async models(): Promise<ModelOption[]> {
     const base: ModelOption = {
       id: "h3:minimax-h3-swap",
       label: "MiniMax H3 · Character Swap",
-      provider: "Comfy Cloud · workflow",
+      provider: local() ? "Your ComfyUI · workflow" : "Comfy Cloud · workflow",
       badges: ["LoRA", "No prep"],
       qualities: ["480p", "768p"],
       maxSeconds: 15,
       available: false,
     };
-    if (!hasKey()) return [{ ...base, needs: "Add COMFY_API_KEY to app/.env" }];
+    if (!local() && !hasKey()) return [{ ...base, needs: "Add COMFY_API_KEY to app/.env, or switch Where it runs to LOCAL" }];
     let names: string[];
     try {
       names = await accountLoras();
     } catch (e) {
-      return [{ ...base, needs: `Comfy Cloud unreachable: ${(e as Error).message}` }];
+      return [{ ...base, needs: `${local() ? "Your ComfyUI" : "Comfy Cloud"} unreachable: ${(e as Error).message}` }];
     }
     const loras = H3_LORAS.map((l) => ({ id: l.id, label: l.label, by: l.by, url: l.url, installed: !l.file || !!findLora(names, l.file) }));
     return [{ ...base, available: true, loras }];
@@ -75,7 +85,12 @@ export const h3Cloud: Provider = {
     let loraFile: string | undefined;
     if (lora.file) {
       loraFile = findLora(await accountLoras(), lora.file);
-      if (!loraFile) throw new Error(`${lora.label} is not in your Comfy Cloud models yet. Import it in Comfy Cloud → Model Library → Import (${lora.url}), or pick "No LoRA".`);
+      if (!loraFile)
+        throw new Error(
+          local()
+            ? `${lora.label} is not in your ComfyUI's models/loras yet. Use Download models under Where it runs (${lora.url}), or pick "No LoRA".`
+            : `${lora.label} is not in your Comfy Cloud models yet. Import it in Comfy Cloud → Model Library → Import (${lora.url}), or pick "No LoRA".`,
+        );
     }
 
     // the take at 24 fps, cropped to the output size and cut to H3's frame grid
@@ -86,11 +101,7 @@ export const h3Cloud: Provider = {
     const dir = await mkdtemp(join(tmpdir(), "h3-swap-"));
     try {
       const take = join(dir, "take.mp4");
-      await exec("ffmpeg", [
-        "-y", "-v", "error", "-i", job.clipPath, "-t", String(length / FPS),
-        "-vf", `fps=${FPS},scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=yuv420p`,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "16", "-c:a", "aac", "-movflags", "+faststart", take,
-      ]);
+      await fitTake(job.clipPath, take, width, height, length);
       hooks.step?.("inputs", "done");
 
       const graph = await loadGraph("backlot_h3_swap");
@@ -118,7 +129,7 @@ export const h3Cloud: Provider = {
       wf.setInput(one("BL:image"), "image", c.assets.fromFile(character));
       console.log(`submit h3 swap: ${width}x${height} · ${length} frames · lora=${loraFile ?? "none"} · source audio=${src.hasAudio ? "yes" : "no"}`);
 
-      hooks.progress(0.1, "Uploading to Comfy Cloud");
+      hooks.progress(0.1, local() ? "Uploading to your ComfyUI" : "Uploading to Comfy Cloud");
       hooks.step?.("upload", "running");
       const run = await c.submit(wf, { signal: hooks.signal });
       hooks.step?.("upload", "done");
@@ -144,7 +155,7 @@ export const h3Cloud: Provider = {
       hooks.step?.("finish", "running", "downloading the video");
       const files = run.getOutputs(one("BL:output"));
       const output = files.find((f) => /video|mp4/.test(f.contentType)) ?? files[0];
-      if (!output) throw new Error("Comfy Cloud finished without a video output.");
+      if (!output) throw new Error("ComfyUI finished without a video output.");
       await output.toFile(job.outPath);
     } finally {
       await rm(dir, { recursive: true, force: true });

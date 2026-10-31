@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FRAME_MODELS, T2V_ASPECTS, type AgentStage, type CastCard, type FrameModel, type T2vAspect } from "../../server/shared";
+import { FRAME_MODELS, T2V_ASPECTS, type AgentSettings, type AgentStage, type CastCard, type FrameModel, type T2vAspect } from "../../server/shared";
 import { api, type AgentShotView, type AgentSummary, type AgentView } from "../api";
 import { saveToPhotos } from "../save";
 
@@ -21,7 +21,7 @@ const usd = (n: number) => `$${n < 1 ? n.toFixed(2) : n.toFixed(2)}`;
 const KEY = "mogfield.agent.project";
 
 /** Agent mode (experimental): talk to a director, approve the storyboard, the frames and the shots. */
-export function AgentPage(p: { images: CastCard[]; say: (m: string) => void }) {
+export function AgentPage(p: { images: CastCard[]; models: { id: string; available: boolean }[]; say: (m: string) => void }) {
   const [list, setList] = useState<AgentSummary[]>([]);
   const [id, setId] = useState<string | null>(() => {
     try {
@@ -37,9 +37,20 @@ export function AgentPage(p: { images: CastCard[]; say: (m: string) => void }) {
   const [castOpen, setCastOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const log = useRef<HTMLDivElement>(null);
+  const upload = useRef<HTMLInputElement>(null);
+  // a new project: its name and workflow, before the first message
+  const local = p.models.some((m) => m.id.startsWith("pika:") && m.available);
+  const fresh = (): AgentSettings => ({ model: local ? "pika-h3" : "seedance-2-0-fast", quality: "480p", aspect: "9:16", audio: true });
+  const [draft, setDraft] = useState<{ title: string } & AgentSettings>(() => ({ title: "", ...fresh() }));
+  const [renaming, setRenaming] = useState<string | null>(null);
 
   const open = useCallback((x: string | null) => {
     setId(x);
+    // nothing carries over from another project: its cast stays with it
+    if (!x) {
+      setCast([]);
+      setText("");
+    }
     try {
       if (x) localStorage.setItem(KEY, x);
       else localStorage.removeItem(KEY);
@@ -59,6 +70,7 @@ export function AgentPage(p: { images: CastCard[]; say: (m: string) => void }) {
       .then((x) => {
         setProj(x);
         setCast(x.castIds);
+        setRenaming(null);
       })
       .catch(() => open(null));
   }, [id, open]);
@@ -91,13 +103,66 @@ export function AgentPage(p: { images: CastCard[]; say: (m: string) => void }) {
     }
   };
 
+  /** The project's cast, saved with it as soon as it changes. */
+  const setProjectCast = async (next: string[]) => {
+    setCast(next);
+    if (proj) await api.agentUpdate(proj.id, { castIds: next }).then(setProj).catch((e: Error) => p.say(e.message));
+  };
+  const addPicture = async (f: File) => {
+    try {
+      // uploaded into this project only: it does not land in the shared library
+      const card = await api.cast({ file: f, kind: "character", saved: false });
+      await setProjectCast([...cast, card.id].slice(0, 12));
+      if (!proj) setExtra((xs) => [...xs, { id: card.id, url: card.url, prompt: card.prompt }]);
+    } catch (e) {
+      p.say((e as Error).message);
+    }
+  };
+  // pictures uploaded into a project that is not created yet
+  const [extra, setExtra] = useState<{ id: string; url: string; prompt: string }[]>([]);
+  const castCards = [...(proj?.cast ?? []), ...extra.filter((x) => !proj?.cast.some((c) => c.id === x.id)), ...p.images.map((i) => ({ id: i.id, url: i.url, prompt: i.prompt }))];
+  const picture = (cid: string) => castCards.find((x) => x.id === cid);
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      const pr = await api.agentNew({ ...draft, title: draft.title.trim() || undefined, castIds: cast });
+      open(pr.id);
+      setProj(pr);
+      setExtra([]);
+      setDraft({ title: "", ...fresh() });
+      return pr;
+    } catch (e) {
+      p.say((e as Error).message);
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!proj || !confirm(`Delete the project “${proj.title}”? Its storyboard, frames and chat are removed; finished takes stay in History.`)) return;
+    await api.agentDelete(proj.id).catch(() => {});
+    open(null);
+    void api.agentList().then(setList).catch(() => {});
+  };
+
+  const rename = async () => {
+    const title = renaming?.trim();
+    setRenaming(null);
+    if (proj && title && title !== proj.title) await act(() => api.agentUpdate(proj.id, { title }));
+  };
+
   const send = async (say = text) => {
     const msg = say.trim();
     if (!msg || busy || proj?.thinking) return;
     setBusy(true);
     try {
-      const pr = proj ?? (await api.agentNew());
-      if (!proj) open(pr.id);
+      const pr = proj ?? (await api.agentNew({ ...draft, title: draft.title.trim() || undefined, castIds: cast }));
+      if (!proj) {
+        open(pr.id);
+        setExtra([]);
+      }
       setText("");
       setProj(await api.agentSay(pr.id, msg, cast));
     } catch (e) {
@@ -113,19 +178,78 @@ export function AgentPage(p: { images: CastCard[]; say: (m: string) => void }) {
   const drawing = shots.some((s) => s.frame?.status === "running");
   const filmed = shots.filter((s) => s.take?.status === "succeeded").length;
   const stageAt = STAGES.findIndex((s) => s.id === (proj?.stage ?? "brief"));
-  const pics = p.images.slice(0, 24);
+  const pics = p.images.slice(0, 24).filter((i) => !cast.includes(i.id));
+  const settings: AgentSettings = proj?.settings ?? draft;
+  const setSettings = (patch: Partial<AgentSettings>) => {
+    const model = patch.model ?? settings.model;
+    const qs = FRAME_MODELS[model].qualities;
+    const next = { ...settings, ...patch, quality: qs.includes(patch.quality ?? settings.quality) ? (patch.quality ?? settings.quality) : qs[0] };
+    if (!proj) setDraft((d) => ({ ...d, ...next }));
+    // with a storyboard the board's own settings are the project's workflow
+    else if (proj.board) void act(() => api.agentBoard(proj.id, patch));
+    else void act(() => api.agentUpdate(proj.id, { settings: next }));
+  };
 
   return (
     <div className="vp ag">
       <aside className="vp-panel ag-chat">
         <div className="ag-head">
-          <select value={id ?? ""} onChange={(e) => open(e.target.value || null)} aria-label="Project">
-            <option value="">New film</option>
-            {list.map((x) => (
-              <option key={x.id} value={x.id}>{x.title}</option>
-            ))}
-          </select>
+          {renaming !== null ? (
+            <input className="ag-rename" autoFocus value={renaming} maxLength={80} aria-label="Project name" onChange={(e) => setRenaming(e.target.value)} onBlur={() => void rename()} onKeyDown={(e) => { if (e.key === "Enter") void rename(); if (e.key === "Escape") setRenaming(null); }} />
+          ) : (
+            <select value={id ?? ""} onChange={(e) => open(e.target.value || null)} aria-label="Project">
+              <option value="">＋ New project</option>
+              {list.map((x) => (
+                <option key={x.id} value={x.id}>{x.title}{x.cast ? ` · ${x.cast} cast` : ""}</option>
+              ))}
+            </select>
+          )}
+          {proj && renaming === null && (
+            <>
+              <button className="ag-icon" title="Rename project" aria-label="Rename project" onClick={() => setRenaming(proj.title)}>✎</button>
+              {proj.board && <a className="ag-icon" title="Download this project's ComfyUI workflow" aria-label="Download workflow" href={`/api/agent/${proj.id}/workflow`} download>⤓</a>}
+              <button className="ag-icon" title="Delete project" aria-label="Delete project" onClick={() => void remove()}>🗑</button>
+            </>
+          )}
           <span className="ag-badge" title="Agent mode is new: expect rough edges">Experimental</span>
+        </div>
+
+        {!proj && (
+          <div className="ag-new">
+            <b>New project</b>
+            <small>Each project keeps its own workflow, characters, storyboard and chat.</small>
+            <div className="ag-new-row">
+              <input value={draft.title} maxLength={80} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && void create()} placeholder="Project name" aria-label="Project name" />
+              <button disabled={busy} onClick={() => void create()}>Create</button>
+            </div>
+          </div>
+        )}
+        <div className="ag-settings ag-project-settings" aria-label="Project workflow">
+          <label>
+            <span>Model</span>
+            <select value={settings.model} onChange={(e) => setSettings({ model: e.target.value as FrameModel })}>
+              {(Object.keys(FRAME_MODELS) as FrameModel[]).map((m) => (
+                <option key={m} value={m} disabled={m === "pika-h3" && !local}>{FRAME_MODELS[m].label}{m === "pika-h3" && !local ? " (LOCAL only)" : ""}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Quality</span>
+            <select value={settings.quality} onChange={(e) => setSettings({ quality: e.target.value })}>
+              {FRAME_MODELS[settings.model].qualities.map((q) => (
+                <option key={q} value={q}>{q}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Shape</span>
+            <select value={settings.aspect} onChange={(e) => setSettings({ aspect: e.target.value as T2vAspect })}>
+              {(Object.keys(T2V_ASPECTS) as T2vAspect[]).map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </label>
+          <button className={`vp-audio ${settings.audio ? "on" : ""}`} onClick={() => setSettings({ audio: !settings.audio })}>Sound {settings.audio ? "on" : "off"}</button>
         </div>
 
         <div className="vp-body ag-log" ref={log}>
@@ -161,25 +285,33 @@ export function AgentPage(p: { images: CastCard[]; say: (m: string) => void }) {
         <div className="vp-foot ag-compose">
           <div className="ag-cast">
             <button className={`ag-cast-toggle ${castOpen ? "on" : ""}`} onClick={() => setCastOpen((x) => !x)}>
-              Cast{cast.length ? ` · ${cast.length}` : ""}
+              {proj ? "Project cast" : "Cast"}{cast.length ? ` · ${cast.length}` : ""}
             </button>
             {cast.map((c, i) => {
-              const img = p.images.find((x) => x.id === c);
+              const img = picture(c);
               return img ? <img key={c} src={img.url} alt={img.prompt} title={`${i + 1}. ${img.prompt}`} /> : null;
             })}
           </div>
           {castOpen && (
             <div className="ag-cast-pick">
-              {pics.length ? (
-                pics.map((img) => (
-                  <button key={img.id} className={cast.includes(img.id) ? "on" : ""} aria-pressed={cast.includes(img.id)} title={img.prompt} onClick={() => setCast((xs) => (xs.includes(img.id) ? xs.filter((x) => x !== img.id) : xs.length >= 12 ? xs : [...xs, img.id]))}>
+              {/* this project's characters first: tap to take one out of the project */}
+              {cast.map((cid, i) => {
+                const img = picture(cid);
+                return img ? (
+                  <button key={cid} className="on" aria-pressed title={`${img.prompt} · tap to remove from this project`} onClick={() => void setProjectCast(cast.filter((x) => x !== cid))}>
                     <img src={img.url} alt={img.prompt} />
-                    {cast.includes(img.id) && <span>{cast.indexOf(img.id) + 1}</span>}
+                    <span>{i + 1}</span>
                   </button>
-                ))
-              ) : (
-                <small className="vp-hint">Make characters on the Image tab; they show up here.</small>
-              )}
+                ) : null;
+              })}
+              <button className="ag-cast-add" onClick={() => upload.current?.click()} disabled={cast.length >= 12} title="Upload a character into this project only">＋</button>
+              <input ref={upload} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void addPicture(f); e.target.value = ""; }} />
+              {pics.length > 0 && <small className="vp-hint ag-cast-sep">From your library</small>}
+              {pics.map((img) => (
+                <button key={img.id} title={img.prompt} disabled={cast.length >= 12} onClick={() => void setProjectCast([...cast, img.id])}>
+                  <img src={img.url} alt={img.prompt} />
+                </button>
+              ))}
             </div>
           )}
           <div className="ag-input">
@@ -228,32 +360,7 @@ export function AgentPage(p: { images: CastCard[]; say: (m: string) => void }) {
               {b.style && <small>Look: {b.style}</small>}
             </header>
             <div className="ag-settings">
-              <label>
-                <span>Model</span>
-                <select value={b.model} onChange={(e) => void act(() => api.agentBoard(proj!.id, { model: e.target.value }))}>
-                  {(Object.keys(FRAME_MODELS) as FrameModel[]).map((m) => (
-                    <option key={m} value={m}>{FRAME_MODELS[m].label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Quality</span>
-                <select value={b.quality} onChange={(e) => void act(() => api.agentBoard(proj!.id, { quality: e.target.value }))}>
-                  {FRAME_MODELS[b.model].qualities.map((q) => (
-                    <option key={q} value={q}>{q}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Shape</span>
-                <select value={b.aspect} onChange={(e) => void act(() => api.agentBoard(proj!.id, { aspect: e.target.value }))}>
-                  {(Object.keys(T2V_ASPECTS) as T2vAspect[]).map((a) => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
-              </label>
-              <button className={`vp-audio ${b.audio ? "on" : ""}`} onClick={() => void act(() => api.agentBoard(proj!.id, { audio: !b.audio }))}>Sound {b.audio ? "on" : "off"}</button>
-              <span className="ag-total">{shots.length} shots · {shots.reduce((t, s) => t + s.seconds, 0)} s</span>
+              <span className="ag-total">{FRAME_MODELS[b.model].label} · {b.quality} · {b.aspect} · {shots.length} shots · {shots.reduce((t, s) => t + s.seconds, 0)} s</span>
             </div>
 
             <div className={`ag-shots r${b.aspect.replace(":", "x")}`}>

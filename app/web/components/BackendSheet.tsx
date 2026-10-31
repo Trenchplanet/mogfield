@@ -78,6 +78,13 @@ export function BackendSheet(p: { initial?: "cloud" | "custom"; onClose: () => v
               <i className={status.apiKey ? "ok" : "bad"} />
               {status.apiKey ? "Comfy API key set: Seedance, Character Studio and Re-shoot can run" : "No COMFY_API_KEY in app/.env: Seedance, Character Studio and Re-shoot cannot run"}
             </p>
+            {/* every missing file in one go, from Hugging Face; only for the ComfyUI in use (the script is made from its check) */}
+            {status.connected && !unsaved && status.target === "custom" && status.features.some((f) => f.missingFiles.length || f.optionalFiles.length) && (
+              <div className="be-download">
+                <a className="btn accent" href="/api/backend/models.sh" download="mogfield-models.sh">Download models</a>
+                <small>One script for every missing file: Pika H3 Flex, character swap, Genjutsu, Re-shoot and the director. Run <code>bash mogfield-models.sh</code> in your ComfyUI folder; SAM 3 also needs <code>HF_TOKEN</code>.</small>
+              </div>
+            )}
             {status.features.length > 0 && (
               <ul className="be-features">
                 {status.features.map((f) => (

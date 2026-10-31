@@ -86,11 +86,11 @@ export async function saveBackend(b: Backend): Promise<void> {
   await writeFile(FILE, JSON.stringify(current, null, 2));
 }
 
-type ObjectInfo = Record<string, { input?: { required?: Record<string, unknown[]>; optional?: Record<string, unknown[]> } }>;
+export type ObjectInfo = Record<string, { input?: { required?: Record<string, unknown[]>; optional?: Record<string, unknown[]> } }>;
 
 /** The target's node list. A plain ComfyUI serves /object_info; Comfy Cloud and
  *  comfy-api-proxy serve /api/object_info. */
-async function objectInfo(b: Backend): Promise<ObjectInfo> {
+export async function objectInfo(b: Backend = current): Promise<ObjectInfo> {
   const key = process.env.COMFY_API_KEY?.trim();
   const base = b.target === "custom" ? b.url! : CLOUD;
   const headers: Record<string, string> = b.target === "cloud" && key ? { "X-API-Key": key } : {};
@@ -121,13 +121,17 @@ function checkGraph(graph: Graph, info: ObjectInfo) {
     const spec = info[cls];
     if (!spec) {
       missingNodes.add(cls);
+      // its model files cannot be checked either: list them so the download covers them
+      for (const v of Object.values(node.inputs ?? {})) if (typeof v === "string" && /\.(safetensors|ckpt|pt|pth|bin|gguf|onnx|sft)$/i.test(v)) missingFiles.add(v);
       continue;
     }
     const inputs = { ...spec.input?.required, ...spec.input?.optional };
     for (const [name, value] of Object.entries(node.inputs ?? {})) {
-      // a combo input lists the files the target has: a loader value not in it is missing there
-      const options = inputs[name]?.[0];
-      if (typeof value !== "string" || !Array.isArray(options) || !options.length) continue;
+      // a combo input lists the files the target has: a loader value not in it is missing there,
+      // and an empty list (no files in that folder at all) means it is missing too
+      const spec = inputs[name];
+      const options = Array.isArray(spec?.[0]) ? spec[0] : spec?.[0] === "COMBO" ? (spec[1] as { options?: unknown[] } | undefined)?.options : undefined;
+      if (typeof value !== "string" || !Array.isArray(options)) continue;
       if (!/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx|sft)$/i.test(value)) continue;
       if (!options.includes(value)) (/lora/i.test(cls) ? optionalFiles : missingFiles).add(value);
     }

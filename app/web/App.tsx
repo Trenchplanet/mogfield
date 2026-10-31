@@ -354,7 +354,8 @@ export function App() {
     if (!clip || developing) return;
     // H3 only swaps the person when it gets the SAM 3 silhouette take or an installed swap LoRA
     const h3Lora = models.find((m) => m.id === model)?.loras?.find((l) => l.id === lora);
-    const h3NeedsPrep = model.startsWith("h3:") && !(h3Lora && h3Lora.id !== "none" && h3Lora.installed);
+    // Pika H3 Flex has no swap LoRA: its character swap always works from the silhouette take
+    const h3NeedsPrep = model === "pika:h3-flex-swap" || (model.startsWith("h3:") && !(h3Lora && h3Lora.id !== "none" && h3Lora.installed));
     // Use Depth Map off: no depth, no SAM 3 prep; the model gets the original video
     const needsGenjustsu = useDepth && (level === "easy" || mode === "recast") && ((model.startsWith("comfy:") && model.includes("seedance-2-5")) || h3NeedsPrep);
     const approvedPreparation = preparation && preparation.clipId === clip.id && sameTrim(preparation.trim, requestTrim) && preparation.status === "ready" && preparation.approved ? preparation : null;
@@ -515,9 +516,11 @@ export function App() {
       say("That clip is no longer in your library.");
       return;
     }
-    // prepared takes run on Seedance 2.5 or H3 character swap; keep H3 when it is picked
+    // prepared takes run on Seedance 2.5, H3 or Pika H3 Flex character swap; keep a swap when it is picked
     const seedance = models.find((m) => m.available && m.id.includes("seedance-2-5"));
-    if (seedance && !model.includes("seedance-2-5") && !model.startsWith("h3:")) setModel(seedance.id);
+    const pikaSwap = models.find((m) => m.available && m.id === "pika:h3-flex-swap");
+    if (model === "pika:h3-flex" && pikaSwap) setModel(pikaSwap.id);
+    else if (seedance && !model.includes("seedance-2-5") && !model.startsWith("h3:") && model !== "pika:h3-flex-swap") setModel(seedance.id);
     if (level === "pro") setMode("recast");
     setClipId(c.id);
     setTrims((m) => ({ ...m, [c.id]: prep.trim ?? { start: 0, end: c.duration } }));
@@ -988,7 +991,7 @@ export function App() {
         />
         </div>
       ))}
-      {keep("agent", <AgentPage images={images} say={say} />)}
+      {keep("agent", <AgentPage images={images} models={models} say={say} />)}
       {keep("library", (
         <LibraryPage
           queue={queue}
@@ -1200,7 +1203,7 @@ export function App() {
           ) : (
             <div className="how">
               {/* opens on the workflow behind what you have picked */}
-              <GraphView name={level === "pro" ? (mode === "recast" ? "backlot_recast" : "backlot_direct") : model.startsWith("h3:") ? "backlot_h3_swap" : "mogfield_seedance_restyle"} />
+              <GraphView name={level === "pro" ? (mode === "recast" ? "backlot_recast" : "backlot_direct") : model.startsWith("h3:") ? "backlot_h3_swap" : model.startsWith("pika:") ? "backlot_pika_h3_ref2va" : "mogfield_seedance_restyle"} />
             </div>
           )}
         </main>

@@ -92,10 +92,11 @@ export async function runRecast(i: PipelineInput, hooks: PipelineHooks) {
   if (option && i.duration > option.maxSeconds + 0.5)
     throw new Error(`${option.label} makes up to ${option.maxSeconds} s. Trim your video to ${option.maxSeconds} s or less.`);
   if (target.provider.id === "h3") return runH3Swap(i, target, hooks);
+  // Pika H3 Flex takes the take as <Video 1>: swap like H3, or restyle / re-shoot like the reference-video models
+  if (target.provider.id === "pika") return target.model === "h3-flex-swap" ? runH3Swap(i, target, hooks) : runRefVideo(i, target, hooks);
   if (target.provider.id === "refv") return runRefVideo(i, target, hooks);
   const textOnlyLtx = target.provider.id === "comfy" && target.model.startsWith("ltx/ltx-2-5-");
-  // MiniMax H3 and Pika H3 Flex take pictures and text, not the take, and make their own sound
-  const miniMaxH3 = (target.provider.id === "comfy" && target.model === "minimax/minimax-h3") || target.provider.id === "pika";
+  const miniMaxH3 = target.provider.id === "comfy" && target.model === "minimax/minimax-h3";
 
   // 1. depth map of the take (cached per clip), unless the user turned depth off
   const noDepth = i.useDepth === false && !i.preparedVideoPath;
@@ -203,7 +204,7 @@ export async function runRecast(i: PipelineInput, hooks: PipelineHooks) {
       signal: hooks.signal,
     },
   );
-  if (miniMaxH3) hooks.step?.("finish", "running", "keeping the model's generated audio");
+  if (miniMaxH3) hooks.step?.("finish", "running", "keeping MiniMax's generated audio");
   else {
     hooks.step?.("finish", "running", "putting your original audio back");
     await restoreSourceAudio(i.clipPath, i.outPath);

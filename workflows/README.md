@@ -12,7 +12,7 @@ schema-checked rebuilds of every graph here, laid-out editor versions, and
 | --- | --- | --- |
 | `backlot_pika_h3_t2v.json` | LOCAL only; schema-checked, not run | Prompt → **Pika H3 Flex** (MiniMax H3 FL2VA + Pika LoRA) → video with sound |
 | `backlot_pika_h3_fl2va.json` | LOCAL only; schema-checked, not run | Start frame (+ optional end frame) → **Pika H3 Flex** → video with sound. Create, Extend and the director's shots |
-| `backlot_pika_h3_ref2va.json` | LOCAL only; schema-checked, not run | Up to 9 reference pictures → **Pika H3 Flex** (MiniMax H3 Ref2VA + Pika LoRA) → video with sound. Create with references, and the Studio with a character sheet |
+| `backlot_pika_h3_ref2va.json` | LOCAL only; schema-checked, not run | Up to 9 reference pictures and/or the take as a reference video (with its sound) → **Pika H3 Flex** (MiniMax H3 Ref2VA + Pika LoRA) → video with sound. Create with references, Studio restyle, Re-shoot, character swap and Genjutsu takes |
 | `backlot_direct.json` | ships | Take → Depth Anything V2 → **CameraRig** (depth-reprojected camera move) → **LensKit** → **GradeLUT** → **Letterbox** → MP4 |
 | `backlot_depth.json` | drafted, untested — needs GPU run | Take → Depth Anything V2 → depth MP4 for the monitor's depth view (bright = near) |
 | `backlot_recast.json` | drafted, untested — needs GPU run | Take → Depth Anything V2 → **CameraRig** → LTX 2.5 distilled v2v (union-control IC-LoRA on the moved depth, ingredients IC-LoRA on the `BL:cast` sheet) → **LensKit** → **GradeLUT** → **Letterbox** → MP4 |
@@ -41,10 +41,29 @@ frame-count math were flattened out so the server sets `width`, `height` and
 settings were kept: LCM, 6 manual sigmas, LoRA strength 1.0. Comfy Cloud and
 the Comfy API do not serve Pika H3 Flex, so it runs only when **Where it runs**
 is set to LOCAL (your own ComfyUI, e.g. a GPU pod). It needs no Comfy API key.
-With LOCAL on, Pika H3 Flex is the default in Create, Extend and the Studio.
-With API on, it is shown as unavailable and the other models stay the default.
-The director can pick `pika-h3`, but its default remains Seedance. Pika always
-makes sound, so the Studio keeps the model's audio.
+With LOCAL on, Pika H3 Flex is the default in Create, Extend, Re-shoot and the
+Studio. A new director project defaults to it too. With API on, it is shown as
+unavailable and the other models stay the default.
+
+- **Studio, Re-shoot:** `pika:h3-flex` gets the take, fitted to 24 fps and the
+  17n+5 grid, as `<Video 1>` with its sound. The character or style picture is
+  `<Picture 1>`, with the same prompts as the reference-video models.
+- **Character swap:** `pika:h3-flex-swap` uses the H3 swap prompt. It has no swap
+  LoRA, so it always works from the approved Genjutsu silhouette take, as H3 swap
+  does without its LoRA. The original sound is put back afterwards.
+- **Director projects:** each shot is filmed from its key frame (fl2va).
+  **Download workflow** on a project gives every shot as one ComfyUI graph.
+
+The `BL:video` / `BL:video-parts` nodes for the reference video are added by
+`app/server/pika.ts`; they are not in the template.
+
+**Download models.** Under *Where it runs*, with LOCAL connected, **Download
+models** gives `mogfield-models.sh`. It fetches every file that ComfyUI lacks
+from Hugging Face, for every feature, using the links in `app/server/models.ts`
+(taken from ComfyUI's template notes). Run it in the ComfyUI folder. It skips
+files you have and resumes broken downloads. SAM 3 is gated: accept its licence
+on Hugging Face and set `HF_TOKEN`. Files with no known link, and node packs
+the ComfyUI lacks, are listed at the end for you to install.
 
 | Title | Node | Set by the server |
 | --- | --- | --- |

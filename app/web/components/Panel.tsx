@@ -300,7 +300,7 @@ export function ControlPanel(p: {
         )}
 
         {p.mode === "recast" && <DepthToggle on={p.useDepth} setOn={p.setUseDepth} />}
-        {p.mode === "recast" && !p.model.startsWith("h3:") && p.useDepth && <BackgroundRow keep={p.keepBackground} setKeep={p.setKeepBackground} text={p.background} setText={p.setBackground} refs={mentionRefs} />}
+        {p.mode === "recast" && !p.model.startsWith("h3:") && p.model !== "pika:h3-flex-swap" && p.useDepth && <BackgroundRow keep={p.keepBackground} setKeep={p.setKeepBackground} text={p.background} setText={p.setBackground} refs={mentionRefs} />}
 
         {pro ? (
           <div className={`row-card prompt ${promptOn ? "open" : ""}`}>

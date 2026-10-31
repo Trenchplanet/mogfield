@@ -473,8 +473,8 @@ function ExtendForm(p: { clip: Clip | null; take: T2vTake | null; models: ModelO
 /* ---------------------------------------------------------------- Re-shoot */
 
 function ReshootForm(p: { clip: Clip | null; trim: Trim; models: ModelOption[]; onPickVideo: () => void; onStart: (o: { angle: ReshootAngle; view?: ReshootView; direction?: string; model: string; quality: Quality; trim?: Trim }) => Promise<void> }) {
-  // models that take the whole take as a reference: Seedance, Wan 3.0 and MiniMax H3
-  const options = p.models.filter((m) => m.available && (/seedance/.test(m.id) || m.id.startsWith("refv:")));
+  // models that take the whole take as a reference: Seedance, Wan 3.0, MiniMax H3 and, on LOCAL, Pika H3 Flex
+  const options = p.models.filter((m) => m.available && (/seedance/.test(m.id) || m.id.startsWith("refv:") || m.id === "pika:h3-flex"));
   // a preset button, or null once the camera has been dragged to a free position
   const [preset, setPreset] = useState<ReshootAngle | null>("orbit_left");
   const [view, setView] = useState<ReshootView>(ANGLE_VIEW.orbit_left);
@@ -490,7 +490,7 @@ function ReshootForm(p: { clip: Clip | null; trim: Trim; models: ModelOption[]; 
   const angleName = preset ? RESHOOT_ANGLES[preset].label : "Custom angle";
   const [direction, setDirection] = useState("");
   const [modelId, setModelId] = useState("");
-  const model = options.find((m) => m.id === modelId) ?? options.find((m) => /2-0-260128/.test(m.id)) ?? options[0];
+  const model = options.find((m) => m.id === modelId) ?? options.find((m) => m.id === "pika:h3-flex") ?? options.find((m) => /2-0-260128/.test(m.id)) ?? options[0];
   const [quality, setQuality] = useState<Quality>("480p");
   const q: Quality = model?.qualities.includes(quality) ? quality : (model?.qualities[0] ?? "480p");
   const [busy, setBusy] = useState(false);

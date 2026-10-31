@@ -7,6 +7,7 @@ import { loadGraph } from "./engines/comfy.js";
 import { editPrompt, SHEET_PROMPT } from "./characters.js";
 import { framesGraph } from "./frames.js";
 import { PIKA_MAX_REFS } from "./pika.js";
+import { h3Tags } from "./providers/pikaH3.js";
 import { buildRefVideoPrompt } from "./pipeline.js";
 import { seedanceText } from "./providers/schemaFill.js";
 import { refVideoGraph } from "./providers/refVideo.js";
@@ -48,7 +49,7 @@ async function takeGraph(model: string, r: ExportRequest, prompt: string, second
   const quality = r.quality ?? "720p";
   if (model.startsWith("h3:")) return (await loadGraph("backlot_h3_swap")) as Graph;
   if (model.startsWith("comfyui:")) return (await loadGraph("backlot_recast")) as Graph;
-  if (model.startsWith("pika:")) return framesGraph({ model: "pika-h3", prompt, refs: image ? [image] : [], quality, seconds, aspect, audio: true }).graph as Graph;
+  if (model.startsWith("pika:")) return framesGraph({ model: "pika-h3", prompt: h3Tags(prompt), refs: image ? [image] : [], refVideo: { path: "take.mp4", audio: true }, quality, seconds, aspect, audio: true }).graph as Graph;
   if (model.startsWith("refv:")) return refVideoGraph({ model: model.slice(5), prompt, video: "take.mp4", image, quality, seconds }).graph;
   if (/ltx-2-5-(fast|pro)/.test(model) || /minimax-h3$/.test(model)) {
     const id: FrameModel = model.includes("ltx-2-5-pro") ? "ltx-2-5-pro" : model.includes("ltx") ? "ltx-2-5-fast" : "h3";

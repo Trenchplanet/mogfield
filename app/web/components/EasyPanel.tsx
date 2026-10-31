@@ -124,7 +124,7 @@ export function EasyPanel(p: {
   });
 
   const current = p.models.find((m) => m.id === p.model) ?? p.models[0];
-  const h3 = !!current?.id.startsWith("h3:"); // H3 swap keeps the scene as it is
+  const h3 = !!current?.id.startsWith("h3:") || current?.id === "pika:h3-flex-swap"; // a swap keeps the scene as it is
   const needsCharacter = current?.inputMode !== "text-only" && current?.inputMode !== "text-image";
   const ready = !!p.clip && (!needsCharacter || p.characters.length > 0) && !!current?.available;
   const reason = !p.clip ? "Add a video" : needsCharacter && !p.characters.length ? "Add at least one character" : current && !current.available ? `${current.label} isn't connected yet` : null;

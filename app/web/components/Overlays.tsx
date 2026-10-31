@@ -24,6 +24,8 @@ const OUTLINE: Graph = {
 
 /** The workflows behind MOGFIELD, each one a ComfyUI graph you can open and run yourself. */
 export const WORKFLOWS: { name: string; label: string; line: string }[] = [
+  { name: "backlot_pika_h3_ref2va", label: "Pika H3 Flex · reference (local)", line: "Your take, its sound and your character go into Pika H3 Flex on your own ComfyUI: swap, restyle or re-shoot." },
+  { name: "backlot_pika_h3_fl2va", label: "Pika H3 Flex · frames (local)", line: "A start frame, and optionally an end frame, filmed by Pika H3 Flex with sound. Create, Extend and the director's shots." },
   { name: "backlot_h3_swap", label: "Character swap · H3", line: "Your video and character go into MiniMax H3, which films the same motion again with your character in it." },
   { name: "mogfield_seedance_restyle", label: "Character swap · Seedance", line: "The video and your character pictures go to Seedance as references: same motion, new person." },
   { name: "backlot_genjustsu_sam", label: "Person masks · SAM 3", line: "Tracks the person you picked through every shot, so only they get swapped." },
